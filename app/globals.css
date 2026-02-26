@@ -1,0 +1,20 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme {
+  --color-primary: #8E2483;
+  --color-gold: #D4AF37;
+  --color-background-light: #f8f6f6;
+  --color-background-dark: #221016;
+  --font-display: var(--font-manrope);
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
