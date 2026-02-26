@@ -43,7 +43,7 @@ export const api = {
       console.error('Error fetching clients:', error);
       return [];
     }
-    return data as Client[];
+    return (data || []) as Client[];
   },
   async addClient(client: Omit<Client, 'id'>): Promise<Client> {
     const { data, error } = await supabase.from('clients').insert([client]).select().single();
@@ -67,7 +67,7 @@ export const api = {
       console.error('Error fetching products:', error);
       return [];
     }
-    return data.map(p => ({
+    return (data || []).map(p => ({
       id: p.id,
       name: p.name,
       price: Number(p.price),
@@ -126,7 +126,7 @@ export const api = {
       console.error('Error fetching sales:', error);
       return [];
     }
-    return data.map(s => ({
+    return (data || []).map(s => ({
       id: s.id,
       clientId: s.client_id,
       totalValue: Number(s.total_value),
@@ -178,6 +178,25 @@ export const api = {
       paymentMethod: newSale.payment_method,
       date: newSale.date,
       items: items
+    };
+  },
+  async updateSale(id: string, updates: Partial<Sale>): Promise<Sale> {
+    const dbSale: any = {};
+    if (updates.amountPaid !== undefined) dbSale.amount_paid = updates.amountPaid;
+    if (updates.remainingValue !== undefined) dbSale.remaining_value = updates.remainingValue;
+    if (updates.paymentMethod !== undefined) dbSale.payment_method = updates.paymentMethod;
+    
+    const { data, error } = await supabase.from('sales').update(dbSale).eq('id', id).select().single();
+    if (error) throw error;
+    
+    return {
+      id: data.id,
+      clientId: data.client_id,
+      totalValue: Number(data.total_value),
+      amountPaid: Number(data.amount_paid),
+      remainingValue: Number(data.remaining_value),
+      paymentMethod: data.payment_method,
+      date: data.date
     };
   }
 };

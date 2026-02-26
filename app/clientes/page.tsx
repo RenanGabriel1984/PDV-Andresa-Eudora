@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Header from '@/components/Header';
-import { Plus, Search, MapPin, Phone, Edit2, Trash2, ChevronDown, ChevronUp, AlertCircle, ShoppingBag, User } from 'lucide-react';
+import { Plus, Search, MapPin, Phone, Edit2, Trash2, ChevronDown, ChevronUp, AlertCircle, ShoppingBag, User, CheckCircle } from 'lucide-react';
 import { api, Client, Sale, Product } from '@/lib/api';
 
 export default function Clientes() {
@@ -23,6 +23,10 @@ export default function Clientes() {
 
   // Delete confirmation state
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Payment state
+  const [payingSaleId, setPayingSaleId] = useState<string | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
 
   useEffect(() => {
     async function loadData() {
@@ -92,7 +96,45 @@ export default function Clientes() {
   };
 
   const formatCurrency = (value: number) => {
-    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    return (value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  };
+
+  const formatPriceInput = (value: string) => {
+    const numbers = value.replace(/\D/g, '');
+    if (!numbers) return '';
+    const amount = (parseInt(numbers) / 100).toFixed(2);
+    return amount.replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  };
+
+  const parsePriceInput = (value: string) => {
+    return parseFloat(value.replace(/\./g, '').replace(',', '.'));
+  };
+
+  const handleRegisterPayment = async (saleId: string, currentAmountPaid: number, remainingValue: number) => {
+    if (!paymentAmount) return;
+    
+    const amountToPay = parsePriceInput(paymentAmount);
+    if (amountToPay <= 0 || amountToPay > remainingValue) {
+      alert('Valor inválido. O valor deve ser maior que zero e menor ou igual ao restante.');
+      return;
+    }
+
+    try {
+      const newAmountPaid = currentAmountPaid + amountToPay;
+      const newRemainingValue = remainingValue - amountToPay;
+
+      const updatedSale = await api.updateSale(saleId, {
+        amountPaid: newAmountPaid,
+        remainingValue: newRemainingValue
+      });
+
+      setSales(sales.map(s => s.id === saleId ? { ...s, amountPaid: newAmountPaid, remainingValue: newRemainingValue } : s));
+      setPayingSaleId(null);
+      setPaymentAmount('');
+    } catch (error) {
+      console.error('Error registering payment:', error);
+      alert('Erro ao registrar pagamento.');
+    }
   };
 
   const getClientSales = (clientId: string) => {
@@ -110,8 +152,8 @@ export default function Clientes() {
   };
 
   const filteredClients = clients.filter(c => 
-    c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.phone.includes(searchQuery)
+    (c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (c.phone || '').includes(searchQuery)
   );
 
   return (
@@ -215,13 +257,13 @@ export default function Clientes() {
                 >
                   <div className="flex items-center gap-4">
                     <div className="size-12 rounded-full bg-gradient-to-br from-primary/20 to-gold/20 flex items-center justify-center text-primary font-bold text-lg shrink-0">
-                      {client.name.charAt(0).toUpperCase()}
+                      {(client.name || 'C').charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <h4 className="font-bold text-slate-900">{client.name}</h4>
+                      <h4 className="font-bold text-slate-900">{client.name || 'Sem Nome'}</h4>
                       <div className="flex items-center gap-2 text-sm text-slate-500 mt-0.5">
                         <Phone size={14} />
-                        <span>{client.phone}</span>
+                        <span>{client.phone || 'Sem Telefone'}</span>
                       </div>
                     </div>
                   </div>
@@ -287,6 +329,41 @@ export default function Clientes() {
                                   <p className="text-sm text-slate-700">{getProductName(sale.productId || '')}</p>
                                 )}
                               </div>
+                              
+                              {sale.remainingValue > 0 && (
+                                <div className="mt-2 pt-2 border-t border-slate-100">
+                                  {payingSaleId === sale.id ? (
+                                    <div className="flex gap-2 items-center">
+                                      <input 
+                                        type="text" 
+                                        placeholder="R$ 0,00" 
+                                        value={paymentAmount}
+                                        onChange={(e) => setPaymentAmount(formatPriceInput(e.target.value))}
+                                        className="flex-1 rounded-lg border border-primary/20 bg-white focus:border-primary focus:ring-1 focus:ring-primary h-9 px-3 outline-none text-sm font-bold text-emerald-600"
+                                      />
+                                      <button 
+                                        onClick={() => handleRegisterPayment(sale.id, sale.amountPaid, sale.remainingValue)}
+                                        className="h-9 px-3 bg-emerald-500 text-white rounded-lg text-sm font-bold hover:bg-emerald-600 transition-colors"
+                                      >
+                                        Salvar
+                                      </button>
+                                      <button 
+                                        onClick={() => { setPayingSaleId(null); setPaymentAmount(''); }}
+                                        className="h-9 px-3 bg-slate-200 text-slate-600 rounded-lg text-sm font-bold hover:bg-slate-300 transition-colors"
+                                      >
+                                        X
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button 
+                                      onClick={() => { setPayingSaleId(sale.id); setPaymentAmount(formatPriceInput(sale.remainingValue.toFixed(2))); }}
+                                      className="w-full flex items-center justify-center gap-2 bg-emerald-50 text-emerald-600 border border-emerald-200 text-xs font-bold py-2 rounded-lg hover:bg-emerald-100 transition-colors"
+                                    >
+                                      <CheckCircle size={14} /> Registrar Pagamento
+                                    </button>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>

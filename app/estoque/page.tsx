@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Header from '@/components/Header';
-import { PlusCircle, Sparkles, Palette, Heart, Droplet, Scissors, Brush, MoreVertical, Package } from 'lucide-react';
+import { PlusCircle, Sparkles, Palette, Heart, Droplet, Scissors, Brush, MoreVertical, Package, Edit2, X, Check } from 'lucide-react';
 import { api, Product } from '@/lib/api';
 
 export default function Estoque() {
@@ -18,6 +18,13 @@ export default function Estoque() {
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('Todos');
   const [isViewingAll, setIsViewingAll] = useState(false);
+  const [showOutOfStock, setShowOutOfStock] = useState(false);
+
+  // Edit state
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [editPrice, setEditPrice] = useState('');
+  const [editingQuantityId, setEditingQuantityId] = useState<string | null>(null);
+  const [editQuantity, setEditQuantity] = useState('');
 
   useEffect(() => {
     async function loadData() {
@@ -108,19 +115,60 @@ export default function Estoque() {
     }
   };
 
+  const handleEditPrice = async (id: string) => {
+    if (!editPrice) return;
+    
+    const numericPrice = parseFloat(editPrice.replace(/\./g, '').replace(',', '.'));
+    if (isNaN(numericPrice) || numericPrice <= 0) {
+      alert('Preço inválido.');
+      return;
+    }
+
+    try {
+      const updatedProduct = await api.updateProduct(id, { price: numericPrice });
+      setProducts(products.map(p => p.id === id ? updatedProduct : p));
+      setEditingProductId(null);
+      setEditPrice('');
+    } catch (error) {
+      console.error('Error updating price:', error);
+      alert('Erro ao atualizar preço.');
+    }
+  };
+
+  const handleEditQuantity = async (id: string) => {
+    if (!editQuantity) return;
+    
+    const numericQuantity = parseInt(editQuantity);
+    if (isNaN(numericQuantity) || numericQuantity < 0) {
+      alert('Quantidade inválida.');
+      return;
+    }
+
+    try {
+      const updatedProduct = await api.updateProduct(id, { quantity: numericQuantity });
+      setProducts(products.map(p => p.id === id ? updatedProduct : p));
+      setEditingQuantityId(null);
+      setEditQuantity('');
+    } catch (error) {
+      console.error('Error updating quantity:', error);
+      alert('Erro ao atualizar quantidade.');
+    }
+  };
+
   const getCategoryIcon = (cat: string, size = 24) => {
-    const lowerCat = cat.toLowerCase();
+    const lowerCat = (cat || '').toLowerCase();
     if (lowerCat.includes('perfume')) return <Droplet size={size} />;
     if (lowerCat.includes('shampoo') || lowerCat.includes('cabelo')) return <Scissors size={size} />;
     if (lowerCat.includes('makeup') || lowerCat.includes('maquiagem') || lowerCat.includes('batom')) return <Brush size={size} />;
     return <Package size={size} />;
   };
 
-  const favorites = products.filter(p => p.isFavorite);
+  const inStockProducts = showOutOfStock ? products : products.filter(p => p.quantity > 0);
+  const favorites = inStockProducts.filter(p => p.isFavorite);
   
   const displayedProducts = selectedCategory === 'Todos' 
-    ? (isViewingAll ? products : products.slice(0, 5))
-    : products.filter(p => p.category === selectedCategory);
+    ? (isViewingAll ? inStockProducts : inStockProducts.slice(0, 5))
+    : inStockProducts.filter(p => p.category === selectedCategory);
 
   return (
     <div className="min-h-screen bg-background-light">
@@ -280,7 +328,7 @@ export default function Estoque() {
                   
                   <div className="mt-auto pt-2 border-t border-slate-100">
                     <p className="text-primary font-black text-lg">
-                      R$ {fav.price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      R$ {(fav.price || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
                   </div>
                 </div>
@@ -296,14 +344,25 @@ export default function Estoque() {
                 ? (isViewingAll ? 'Todos os Produtos' : 'Itens Recentes') 
                 : `Categoria: ${selectedCategory}`}
             </h3>
-            {(!isViewingAll || selectedCategory !== 'Todos') && (
-              <span 
-                onClick={() => { setSelectedCategory('Todos'); setIsViewingAll(true); }}
-                className="text-sm font-bold cursor-pointer text-primary"
-              >
-                Ver todos
-              </span>
-            )}
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-600">
+                <input 
+                  type="checkbox" 
+                  checked={showOutOfStock}
+                  onChange={(e) => setShowOutOfStock(e.target.checked)}
+                  className="rounded text-primary focus:ring-primary"
+                />
+                Mostrar esgotados
+              </label>
+              {(!isViewingAll || selectedCategory !== 'Todos') && (
+                <span 
+                  onClick={() => { setSelectedCategory('Todos'); setIsViewingAll(true); }}
+                  className="text-sm font-bold cursor-pointer text-primary"
+                >
+                  Ver todos
+                </span>
+              )}
+            </div>
           </div>
           
           {displayedProducts.length === 0 ? (
@@ -321,9 +380,36 @@ export default function Estoque() {
                   <p className="text-slate-500 text-xs truncate">{product.category} • {product.quantity} un. em estoque</p>
                 </div>
                 <div className="text-right flex flex-col items-end shrink-0">
-                  <p className="text-primary font-bold">
-                    R$ {product.price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </p>
+                  {editingProductId === product.id ? (
+                    <div className="flex items-center gap-1 mb-1">
+                      <input 
+                        type="text" 
+                        value={editPrice}
+                        onChange={(e) => setEditPrice(formatPrice(e.target.value))}
+                        className="w-20 rounded border border-primary/30 px-1 py-0.5 text-sm text-right font-bold text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                        autoFocus
+                      />
+                      <button 
+                        onClick={() => handleEditPrice(product.id)}
+                        className="p-1 bg-emerald-500 text-white rounded hover:bg-emerald-600"
+                      >
+                        <Check size={14} />
+                      </button>
+                      <button 
+                        onClick={() => { setEditingProductId(null); setEditPrice(''); }}
+                        className="p-1 bg-slate-200 text-slate-600 rounded hover:bg-slate-300"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 group cursor-pointer" onClick={() => { setEditingProductId(product.id); setEditPrice(formatPrice(product.price.toFixed(2))); }}>
+                      <p className="text-primary font-bold">
+                        R$ {(product.price || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                      <Edit2 size={14} className="text-slate-300 group-hover:text-primary transition-colors" />
+                    </div>
+                  )}
                   <div className="flex items-center gap-2 mt-1">
                     <button 
                       onClick={() => toggleFavorite(product.id)}
@@ -331,7 +417,6 @@ export default function Estoque() {
                     >
                       <Heart size={18} fill={product.isFavorite ? "currentColor" : "none"} />
                     </button>
-                    <button className="text-slate-400"><MoreVertical size={20} /></button>
                   </div>
                 </div>
               </div>
