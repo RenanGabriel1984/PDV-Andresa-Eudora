@@ -62,24 +62,36 @@ export default function Vendas() {
   const [filterDate, setFilterDate] = useState('');
   const [filterClient, setFilterClient] = useState('');
 
+  const clientsById = useMemo(() => {
+    const map: Record<string, Client> = {};
+    clients.forEach(c => {
+      map[c.id] = c;
+    });
+    return map;
+  }, [clients]);
+
   const filteredSales = useMemo(() => {
     return sales.filter(sale => {
       let matchDate = true;
       let matchClient = true;
 
       if (filterDate) {
-        matchDate = sale.date.startsWith(filterDate);
+        matchDate = (sale.date || '').startsWith(filterDate);
       }
       if (filterClient) {
-        const client = clients.find(c => c.id === sale.clientId);
-        matchClient = client?.name.toLowerCase().includes(filterClient.toLowerCase()) || false;
+        const client = clientsById[sale.clientId];
+        matchClient = (client?.name || '').toLowerCase().includes(filterClient.toLowerCase());
       }
 
       return matchDate && matchClient;
-    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [sales, filterDate, filterClient, clients]);
+    }).sort((a, b) => {
+      const dateA = a.date ? new Date(a.date).getTime() : 0;
+      const dateB = b.date ? new Date(b.date).getTime() : 0;
+      return dateB - dateA;
+    });
+  }, [sales, filterDate, filterClient, clientsById]);
 
-  const selectedClient = useMemo(() => clients.find(c => c.id === selectedClientId), [clients, selectedClientId]);
+  const selectedClient = useMemo(() => clientsById[selectedClientId], [clientsById, selectedClientId]);
   const totalValue = useMemo(() => cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0), [cart]);
 
   const formatCurrency = (value: number) => {
@@ -593,7 +605,7 @@ export default function Vendas() {
                 </div>
               ) : (
                 filteredSales.map(sale => {
-                  const client = clients.find(c => c.id === sale.clientId);
+                  const client = clientsById[sale.clientId];
                   return (
                     <div key={sale.id} className="bg-white p-4 rounded-xl border border-primary/10 shadow-sm space-y-2">
                       <div className="flex justify-between items-start">

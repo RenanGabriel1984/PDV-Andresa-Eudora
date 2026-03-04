@@ -137,8 +137,17 @@ export default function Clientes() {
     }
   };
 
+  const salesByClient = useMemo(() => {
+    const map: Record<string, Sale[]> = {};
+    sales.forEach(sale => {
+      if (!map[sale.clientId]) map[sale.clientId] = [];
+      map[sale.clientId].push(sale);
+    });
+    return map;
+  }, [sales]);
+
   const getClientSales = (clientId: string) => {
-    return sales.filter(s => s.clientId === clientId);
+    return salesByClient[clientId] || [];
   };
 
   const getClientOpenBalance = (clientId: string) => {
@@ -146,8 +155,16 @@ export default function Clientes() {
     return clientSales.reduce((total, sale) => total + sale.remainingValue, 0);
   };
 
+  const productsById = useMemo(() => {
+    const map: Record<string, Product> = {};
+    products.forEach(p => {
+      map[p.id] = p;
+    });
+    return map;
+  }, [products]);
+
   const getProductName = (productId: string) => {
-    const product = products.find(p => p.id === productId);
+    const product = productsById[productId];
     return product ? product.name : 'Produto Desconhecido';
   };
 

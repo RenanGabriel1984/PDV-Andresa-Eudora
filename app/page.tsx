@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Header from '@/components/Header';
-import { Banknote, Star, TrendingUp, ArrowUp, Wallet, PackageOpen } from 'lucide-react';
+import { Banknote, Star, TrendingUp, TrendingDown, ArrowUp, Wallet, PackageOpen } from 'lucide-react';
 import { api, Product, Sale } from '@/lib/api';
 
 export default function Dashboard() {
@@ -30,13 +30,16 @@ export default function Dashboard() {
     loadData();
   }, []);
 
-  if (!mounted) return null; // Prevent hydration mismatch
-
   // --- Calculations ---
   const { totalRevenue, totalPending, bestSellerName, bestSellerCount, last6Months, maxMonthlyRevenue, currentMonthRevenue, growth, topCategories } = useMemo(() => {
     // 1. Totals
     const totalRevenue = sales.reduce((acc, sale) => acc + sale.totalValue, 0);
     const totalPending = sales.reduce((acc, sale) => acc + sale.remainingValue, 0);
+
+    const productsById: Record<string, Product> = {};
+    products.forEach(p => {
+      productsById[p.id] = p;
+    });
 
     // 2. Best Seller
     const productSales: Record<string, number> = {};
@@ -46,7 +49,7 @@ export default function Dashboard() {
           productSales[item.name] = (productSales[item.name] || 0) + item.quantity;
         });
       } else if (sale.productId) {
-        const p = products.find(p => p.id === sale.productId);
+        const p = productsById[sale.productId];
         if (p) productSales[p.name] = (productSales[p.name] || 0) + 1;
       }
     });
@@ -91,12 +94,12 @@ export default function Dashboard() {
     sales.forEach(sale => {
       if (sale.items) {
         sale.items.forEach(item => {
-          const p = products.find(p => p.id === item.productId);
+          const p = productsById[item.productId];
           const cat = p?.category || 'Outros';
           categoryRevenue[cat] = (categoryRevenue[cat] || 0) + (item.price * item.quantity);
         });
       } else if (sale.productId) {
-        const p = products.find(p => p.id === sale.productId);
+        const p = productsById[sale.productId];
         const cat = p?.category || 'Outros';
         categoryRevenue[cat] = (categoryRevenue[cat] || 0) + sale.totalValue;
       }
@@ -117,6 +120,8 @@ export default function Dashboard() {
 
     return { totalRevenue, totalPending, bestSellerName, bestSellerCount, last6Months, maxMonthlyRevenue, currentMonthRevenue, growth, topCategories };
   }, [sales, products]);
+
+  if (!mounted) return null; // Prevent hydration mismatch
 
   const formatCurrency = (value: number) => (value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -147,8 +152,12 @@ export default function Dashboard() {
                 </div>
                 <p className="text-3xl font-extrabold leading-tight text-gold">{formatCurrency(totalRevenue)}</p>
                 <div className="flex items-center gap-1">
-                  <TrendingUp className="text-emerald-500" size={16} />
-                  <p className="text-emerald-500 text-sm font-bold">
+                  {growth >= 0 ? (
+                    <TrendingUp className="text-emerald-500" size={16} />
+                  ) : (
+                    <TrendingDown className="text-red-500" size={16} />
+                  )}
+                  <p className={`text-sm font-bold ${growth >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                     {growth >= 0 ? '+' : ''}{growth.toFixed(1)}% <span className="text-slate-400 font-normal">vs mês passado</span>
                   </p>
                 </div>
