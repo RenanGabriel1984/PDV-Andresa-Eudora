@@ -25,8 +25,12 @@ export default function Header({
   textColor = 'text-slate-900',
 }: HeaderProps) {
   const handleLogout = async () => {
-    if (confirm('Deseja realmente sair?')) {
+    try {
       await supabase.auth.signOut();
+      // Optional: force a page reload to clear any cached state
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Error logging out:', error);
     }
   };
 
