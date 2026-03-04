@@ -66,9 +66,9 @@ export default function Clientes() {
       setPhone('');
       setAddress('');
       setIsAdding(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving client:', error);
-      alert('Erro ao salvar cliente. Tente novamente.');
+      alert(`Erro ao salvar cliente: ${error.message || 'Erro desconhecido'}. Verifique se as variáveis de ambiente do Supabase estão configuradas no Vercel e se o RLS está desativado.`);
     }
   };
 

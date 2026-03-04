@@ -46,12 +46,22 @@ export const api = {
     return (data || []) as Client[];
   },
   async addClient(client: Omit<Client, 'id'>): Promise<Client> {
-    const { data, error } = await supabase.from('clients').insert([client]).select().single();
+    const dbClient = {
+      name: client.name,
+      phone: client.phone,
+      address: client.address || null
+    };
+    const { data, error } = await supabase.from('clients').insert([dbClient]).select().single();
     if (error) throw error;
     return data as Client;
   },
   async updateClient(id: string, client: Partial<Client>): Promise<Client> {
-    const { data, error } = await supabase.from('clients').update(client).eq('id', id).select().single();
+    const dbClient: any = {};
+    if (client.name !== undefined) dbClient.name = client.name;
+    if (client.phone !== undefined) dbClient.phone = client.phone;
+    if (client.address !== undefined) dbClient.address = client.address || null;
+
+    const { data, error } = await supabase.from('clients').update(dbClient).eq('id', id).select().single();
     if (error) throw error;
     return data as Client;
   },

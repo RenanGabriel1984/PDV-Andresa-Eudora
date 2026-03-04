@@ -97,9 +97,9 @@ export default function Estoque() {
       setCategory('');
       setQuantity('');
       setPrice('');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error adding product:', error);
-      alert('Erro ao salvar produto. Tente novamente.');
+      alert(`Erro ao salvar produto: ${error.message || 'Erro desconhecido'}. Verifique se as variáveis de ambiente do Supabase estão configuradas no Vercel e se o RLS está desativado.`);
     }
   };
 

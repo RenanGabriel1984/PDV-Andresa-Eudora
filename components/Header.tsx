@@ -1,6 +1,7 @@
 import Image from 'next/image';
-import { ArrowLeft, Bell, Search, Menu } from 'lucide-react';
+import { ArrowLeft, Bell, Search, Menu, LogOut } from 'lucide-react';
 import Link from 'next/link';
+import { supabase } from '@/lib/supabase';
 
 interface HeaderProps {
   title?: string;
@@ -23,6 +24,12 @@ export default function Header({
   bgColor = 'bg-background-light/80',
   textColor = 'text-slate-900',
 }: HeaderProps) {
+  const handleLogout = async () => {
+    if (confirm('Deseja realmente sair?')) {
+      await supabase.auth.signOut();
+    }
+  };
+
   return (
     <header className={`sticky top-0 z-40 ${bgColor} backdrop-blur-md border-b border-primary/10`}>
       <div className="flex items-center p-4 justify-between max-w-2xl mx-auto">
@@ -67,16 +74,9 @@ export default function Header({
             </button>
           )}
           {showProfile && (
-            <div className="size-10 rounded-full bg-gold/20 border-2 border-gold overflow-hidden">
-              <Image
-                src="https://picsum.photos/100/100"
-                alt="User profile"
-                width={40}
-                height={40}
-                className="w-full h-full object-cover"
-                unoptimized
-              />
-            </div>
+            <button onClick={handleLogout} className={`flex size-10 items-center justify-center rounded-full bg-white/10 hover:bg-red-50 hover:text-red-500 transition-colors ${textColor}`} title="Sair">
+              <LogOut size={20} />
+            </button>
           )}
           {!showSearch && !showNotifications && !showProfile && <div className="size-10"></div>}
         </div>

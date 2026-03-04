@@ -93,9 +93,9 @@ export default function Vendas() {
       setNewClientName('');
       setNewClientPhone('');
       setNewClientAddress('');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error adding client:', error);
-      alert('Erro ao adicionar cliente.');
+      alert(`Erro ao adicionar cliente: ${error.message || 'Erro desconhecido'}. Verifique se as variáveis de ambiente do Supabase estão configuradas no Vercel e se o RLS está desativado.`);
     }
   };
 
@@ -119,9 +119,9 @@ export default function Vendas() {
       setIsAddingProduct(false);
       setNewProductName('');
       setNewProductPrice('');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error adding product:', error);
-      alert('Erro ao adicionar produto.');
+      alert(`Erro ao adicionar produto: ${error.message || 'Erro desconhecido'}. Verifique se as variáveis de ambiente do Supabase estão configuradas no Vercel e se o RLS está desativado.`);
     }
   };
 
@@ -204,9 +204,9 @@ export default function Vendas() {
       setSales([...sales, newSale]);
       setCurrentSale(newSale);
       setShowSummary(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error finalizing sale:', error);
-      alert('Erro ao finalizar venda.');
+      alert(`Erro ao finalizar venda: ${error.message || 'Erro desconhecido'}. Verifique se as variáveis de ambiente do Supabase estão configuradas no Vercel e se o RLS está desativado.`);
     }
   };
 
