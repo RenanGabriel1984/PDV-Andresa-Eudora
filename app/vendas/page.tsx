@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Header from '@/components/Header';
-import { ChevronDown, Search, ShoppingCart, QrCode, Link as LinkIcon, Info, Plus, User, Package, Wallet, MapPin, CheckCircle2, X, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Search, ShoppingCart, QrCode, Link as LinkIcon, Info, Plus, User, Package, Wallet, MapPin, CheckCircle2, X, Trash2 } from 'lucide-react';
 import { api, Client, Product, Sale, SaleItem } from '@/lib/api';
 
 interface CartItem {
@@ -61,6 +61,7 @@ export default function Vendas() {
   const [activeTab, setActiveTab] = useState<'nova' | 'historico'>('nova');
   const [filterDate, setFilterDate] = useState('');
   const [filterClient, setFilterClient] = useState('');
+  const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
 
   const clientsById = useMemo(() => {
     const map: Record<string, Client> = {};
@@ -80,7 +81,10 @@ export default function Vendas() {
       }
       if (filterClient) {
         const client = clientsById[sale.clientId];
-        matchClient = (client?.name || '').toLowerCase().includes(filterClient.toLowerCase());
+        const searchTerm = filterClient.toLowerCase();
+        matchClient = 
+          (client?.name || '').toLowerCase().includes(searchTerm) || 
+          (sale.clientId || '').toLowerCase().includes(searchTerm);
       }
 
       return matchDate && matchClient;
@@ -582,7 +586,7 @@ export default function Vendas() {
                 />
                 <input 
                   type="text" 
-                  placeholder="Nome do cliente" 
+                  placeholder="Nome ou ID do cliente" 
                   value={filterClient}
                   onChange={(e) => setFilterClient(e.target.value)}
                   className="flex-1 rounded-lg border border-primary/20 bg-background-light focus:border-primary focus:ring-1 focus:ring-primary h-10 px-3 outline-none text-sm text-slate-700"
@@ -606,22 +610,60 @@ export default function Vendas() {
               ) : (
                 filteredSales.map(sale => {
                   const client = clientsById[sale.clientId];
+                  const isExpanded = expandedSaleId === sale.id;
+                  
                   return (
-                    <div key={sale.id} className="bg-white p-4 rounded-xl border border-primary/10 shadow-sm space-y-2">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-bold text-slate-900">{client?.name || 'Cliente Desconhecido'}</p>
-                          <p className="text-xs text-slate-500">{new Date(sale.date).toLocaleString('pt-BR')}</p>
+                    <div 
+                      key={sale.id} 
+                      className="bg-white rounded-xl border border-primary/10 shadow-sm overflow-hidden transition-all"
+                    >
+                      <div 
+                        className="p-4 cursor-pointer hover:bg-slate-50 transition-colors"
+                        onClick={() => setExpandedSaleId(isExpanded ? null : sale.id)}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="font-bold text-slate-900">{client?.name || 'Cliente Desconhecido'}</p>
+                            <p className="text-xs text-slate-500">{new Date(sale.date).toLocaleString('pt-BR')}</p>
+                          </div>
+                          <div className="text-right flex flex-col items-end">
+                            <p className="font-bold text-primary">{formatCurrency(sale.totalValue)}</p>
+                            <div className="flex items-center gap-1 mt-1">
+                              <span className="text-xs text-slate-500">{sale.paymentMethod}</span>
+                              {isExpanded ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <p className="font-bold text-primary">{formatCurrency(sale.totalValue)}</p>
-                          <p className="text-xs text-slate-500">{sale.paymentMethod}</p>
-                        </div>
+                        {sale.remainingValue > 0 && (
+                          <div className="flex justify-between items-center text-xs pt-3 mt-2 border-t border-slate-100">
+                            <span className="text-emerald-600 font-semibold">Pago: {formatCurrency(sale.amountPaid)}</span>
+                            <span className="text-orange-500 font-bold">Fiado: {formatCurrency(sale.remainingValue)}</span>
+                          </div>
+                        )}
                       </div>
-                      {sale.remainingValue > 0 && (
-                        <div className="flex justify-between items-center text-xs pt-2 border-t border-slate-100">
-                          <span className="text-emerald-600 font-semibold">Pago: {formatCurrency(sale.amountPaid)}</span>
-                          <span className="text-orange-500 font-bold">Fiado: {formatCurrency(sale.remainingValue)}</span>
+                      
+                      {isExpanded && (
+                        <div className="bg-slate-50 p-4 border-t border-primary/10 animate-in slide-in-from-top-2 duration-200">
+                          <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Produtos Comprados</h4>
+                          {sale.items && sale.items.length > 0 ? (
+                            <div className="space-y-2">
+                              {sale.items.map((item, idx) => (
+                                <div key={idx} className="flex justify-between items-center text-sm bg-white p-2 rounded border border-slate-200">
+                                  <div className="flex items-center gap-2">
+                                    <span className="bg-primary/10 text-primary font-bold text-xs px-2 py-1 rounded">
+                                      {item.quantity}x
+                                    </span>
+                                    <span className="font-medium text-slate-700">{item.name}</span>
+                                  </div>
+                                  <span className="text-slate-600 font-medium">{formatCurrency(item.price * item.quantity)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-slate-500 italic">
+                              {sale.productId ? 'Produto legado (sem detalhes)' : 'Nenhum produto registrado nesta venda.'}
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>
