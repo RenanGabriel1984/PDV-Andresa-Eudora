@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Header from '@/components/Header';
 import { Plus, Search, MapPin, Phone, Edit2, Trash2, ChevronDown, ChevronUp, AlertCircle, ShoppingBag, User, CheckCircle } from 'lucide-react';
 import { api, Client, Sale, Product } from '@/lib/api';
@@ -151,10 +151,10 @@ export default function Clientes() {
     return product ? product.name : 'Produto Desconhecido';
   };
 
-  const filteredClients = clients.filter(c => 
+  const filteredClients = useMemo(() => clients.filter(c => 
     (c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     (c.phone || '').includes(searchQuery)
-  );
+  ), [clients, searchQuery]);
 
   return (
     <div className="min-h-screen bg-background-light">

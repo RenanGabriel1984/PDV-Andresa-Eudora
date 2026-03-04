@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Header from '@/components/Header';
 import { PlusCircle, Sparkles, Palette, Heart, Droplet, Scissors, Brush, MoreVertical, Package, Edit2, X, Check } from 'lucide-react';
 import { api, Product } from '@/lib/api';
@@ -19,6 +19,8 @@ export default function Estoque() {
   const [selectedCategory, setSelectedCategory] = useState<string>('Todos');
   const [isViewingAll, setIsViewingAll] = useState(false);
   const [showOutOfStock, setShowOutOfStock] = useState(false);
+
+  const [isAddingProductFormOpen, setIsAddingProductFormOpen] = useState(true);
 
   // Edit state
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
@@ -163,12 +165,12 @@ export default function Estoque() {
     return <Package size={size} />;
   };
 
-  const inStockProducts = showOutOfStock ? products : products.filter(p => p.quantity > 0);
-  const favorites = inStockProducts.filter(p => p.isFavorite);
+  const inStockProducts = useMemo(() => showOutOfStock ? products : products.filter(p => p.quantity > 0), [showOutOfStock, products]);
+  const favorites = useMemo(() => inStockProducts.filter(p => p.isFavorite), [inStockProducts]);
   
-  const displayedProducts = selectedCategory === 'Todos' 
+  const displayedProducts = useMemo(() => selectedCategory === 'Todos' 
     ? (isViewingAll ? inStockProducts : inStockProducts.slice(0, 5))
-    : inStockProducts.filter(p => p.category === selectedCategory);
+    : inStockProducts.filter(p => p.category === selectedCategory), [selectedCategory, isViewingAll, inStockProducts]);
 
   return (
     <div className="min-h-screen bg-background-light">
@@ -200,102 +202,114 @@ export default function Estoque() {
         </div>
 
         <div className="px-4 py-4">
-          <h3 className="text-slate-900 text-xl font-bold leading-tight mb-4">Adicionar Novo Produto</h3>
-          <form onSubmit={handleSubmit} className="space-y-4 bg-white p-6 rounded-xl border border-primary/10 shadow-sm">
-            <label className="flex flex-col w-full">
-              <p className="text-slate-700 text-sm font-semibold pb-2">Nome do Produto</p>
-              <input 
-                type="text" 
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Ex: Perfume Floral Intenso" 
-                required
-                className="flex w-full rounded-lg text-slate-900 border border-primary/20 bg-background-light focus:border-primary focus:ring-1 focus:ring-primary h-12 px-4 text-base outline-none"
-              />
-            </label>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="flex flex-col w-full">
-                <p className="text-slate-700 text-sm font-semibold pb-2">Categoria</p>
-                {isAddingCategory ? (
-                  <div className="flex gap-2">
+          <div 
+            className="flex justify-between items-center cursor-pointer bg-white p-4 rounded-xl border border-primary/10 shadow-sm mb-4"
+            onClick={() => setIsAddingProductFormOpen(!isAddingProductFormOpen)}
+          >
+            <h3 className="text-slate-900 text-lg font-bold flex items-center gap-2">
+              <PlusCircle className="text-primary" size={20} />
+              Adicionar Novo Produto
+            </h3>
+            <span className="text-primary font-bold">{isAddingProductFormOpen ? '−' : '+'}</span>
+          </div>
+          
+          {isAddingProductFormOpen && (
+            <form onSubmit={handleSubmit} className="space-y-4 bg-white p-6 rounded-xl border border-primary/10 shadow-sm animate-in slide-in-from-top-4 duration-300">
+              <label className="flex flex-col w-full">
+                <p className="text-slate-700 text-sm font-semibold pb-2">Nome do Produto</p>
+                <input 
+                  type="text" 
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Ex: Perfume Floral Intenso" 
+                  required
+                  className="flex w-full rounded-lg text-slate-900 border border-primary/20 bg-background-light focus:border-primary focus:ring-1 focus:ring-primary h-12 px-4 text-base outline-none"
+                />
+              </label>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex flex-col w-full">
+                  <p className="text-slate-700 text-sm font-semibold pb-2">Categoria</p>
+                  {isAddingCategory ? (
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        value={newCategory}
+                        onChange={(e) => setNewCategory(e.target.value)}
+                        placeholder="Nova categoria" 
+                        className="flex w-full rounded-lg text-slate-900 border border-primary/20 bg-background-light focus:border-primary focus:ring-1 focus:ring-primary h-12 px-4 text-base outline-none"
+                      />
+                      <button 
+                        type="button"
+                        onClick={handleAddCategory}
+                        className="h-12 px-4 bg-primary text-white rounded-lg font-bold"
+                      >
+                        Add
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => setIsAddingCategory(false)}
+                        className="h-12 px-4 bg-slate-200 text-slate-600 rounded-lg font-bold"
+                      >
+                        X
+                      </button>
+                    </div>
+                  ) : (
+                    <select 
+                      value={category}
+                      onChange={(e) => {
+                        if (e.target.value === 'new') {
+                          setIsAddingCategory(true);
+                          setCategory('');
+                        } else {
+                          setCategory(e.target.value);
+                        }
+                      }}
+                      required
+                      className="flex w-full rounded-lg text-slate-900 border border-primary/20 bg-background-light focus:border-primary focus:ring-1 focus:ring-primary h-12 px-4 text-base outline-none"
+                    >
+                      <option value="">Selecione...</option>
+                      {categories.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                      <option value="new" className="font-bold text-primary">+ Nova Categoria</option>
+                    </select>
+                  )}
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <label className="flex flex-col w-full">
+                    <p className="text-slate-700 text-sm font-semibold pb-2">Quantidade</p>
                     <input 
-                      type="text" 
-                      value={newCategory}
-                      onChange={(e) => setNewCategory(e.target.value)}
-                      placeholder="Nova categoria" 
+                      type="number" 
+                      value={quantity}
+                      onChange={(e) => setQuantity(e.target.value)}
+                      placeholder="0" 
+                      min="0"
+                      required
                       className="flex w-full rounded-lg text-slate-900 border border-primary/20 bg-background-light focus:border-primary focus:ring-1 focus:ring-primary h-12 px-4 text-base outline-none"
                     />
-                    <button 
-                      type="button"
-                      onClick={handleAddCategory}
-                      className="h-12 px-4 bg-primary text-white rounded-lg font-bold"
-                    >
-                      Add
-                    </button>
-                    <button 
-                      type="button"
-                      onClick={() => setIsAddingCategory(false)}
-                      className="h-12 px-4 bg-slate-200 text-slate-600 rounded-lg font-bold"
-                    >
-                      X
-                    </button>
-                  </div>
-                ) : (
-                  <select 
-                    value={category}
-                    onChange={(e) => {
-                      if (e.target.value === 'new') {
-                        setIsAddingCategory(true);
-                        setCategory('');
-                      } else {
-                        setCategory(e.target.value);
-                      }
-                    }}
-                    required
-                    className="flex w-full rounded-lg text-slate-900 border border-primary/20 bg-background-light focus:border-primary focus:ring-1 focus:ring-primary h-12 px-4 text-base outline-none"
-                  >
-                    <option value="">Selecione...</option>
-                    {categories.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                    <option value="new" className="font-bold text-primary">+ Nova Categoria</option>
-                  </select>
-                )}
+                  </label>
+                  <label className="flex flex-col w-full">
+                    <p className="text-slate-700 text-sm font-semibold pb-2">Preço (R$)</p>
+                    <input 
+                      type="text" 
+                      value={price}
+                      onChange={handlePriceChange}
+                      placeholder="0,00" 
+                      required
+                      className="flex w-full rounded-lg text-slate-900 border border-primary/20 bg-background-light focus:border-primary focus:ring-1 focus:ring-primary h-12 px-4 text-base outline-none"
+                    />
+                  </label>
+                </div>
               </div>
               
-              <div className="grid grid-cols-2 gap-4">
-                <label className="flex flex-col w-full">
-                  <p className="text-slate-700 text-sm font-semibold pb-2">Quantidade</p>
-                  <input 
-                    type="number" 
-                    value={quantity}
-                    onChange={(e) => setQuantity(e.target.value)}
-                    placeholder="0" 
-                    min="0"
-                    required
-                    className="flex w-full rounded-lg text-slate-900 border border-primary/20 bg-background-light focus:border-primary focus:ring-1 focus:ring-primary h-12 px-4 text-base outline-none"
-                  />
-                </label>
-                <label className="flex flex-col w-full">
-                  <p className="text-slate-700 text-sm font-semibold pb-2">Preço (R$)</p>
-                  <input 
-                    type="text" 
-                    value={price}
-                    onChange={handlePriceChange}
-                    placeholder="0,00" 
-                    required
-                    className="flex w-full rounded-lg text-slate-900 border border-primary/20 bg-background-light focus:border-primary focus:ring-1 focus:ring-primary h-12 px-4 text-base outline-none"
-                  />
-                </label>
-              </div>
-            </div>
-            
-            <button type="submit" className="w-full bg-primary text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/20 hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 mt-4">
-              <PlusCircle className="text-gold" size={24} />
-              Salvar Produto
-            </button>
-          </form>
+              <button type="submit" className="w-full bg-primary text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/20 hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 mt-4">
+                <PlusCircle className="text-gold" size={24} />
+                Salvar Produto
+              </button>
+            </form>
+          )}
         </div>
 
         <div className="px-4 py-2 flex flex-col gap-3">

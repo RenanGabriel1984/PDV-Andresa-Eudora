@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Header from '@/components/Header';
 import { ChevronDown, Search, ShoppingCart, QrCode, Link as LinkIcon, Info, Plus, User, Package, Wallet, MapPin, CheckCircle2, X, Trash2 } from 'lucide-react';
 import { api, Client, Product, Sale, SaleItem } from '@/lib/api';
@@ -58,9 +58,29 @@ export default function Vendas() {
 
   const [showSummary, setShowSummary] = useState(false);
   const [currentSale, setCurrentSale] = useState<Sale | null>(null);
+  const [activeTab, setActiveTab] = useState<'nova' | 'historico'>('nova');
+  const [filterDate, setFilterDate] = useState('');
+  const [filterClient, setFilterClient] = useState('');
 
-  const selectedClient = clients.find(c => c.id === selectedClientId);
-  const totalValue = cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+  const filteredSales = useMemo(() => {
+    return sales.filter(sale => {
+      let matchDate = true;
+      let matchClient = true;
+
+      if (filterDate) {
+        matchDate = sale.date.startsWith(filterDate);
+      }
+      if (filterClient) {
+        const client = clients.find(c => c.id === sale.clientId);
+        matchClient = client?.name.toLowerCase().includes(filterClient.toLowerCase()) || false;
+      }
+
+      return matchDate && matchClient;
+    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [sales, filterDate, filterClient, clients]);
+
+  const selectedClient = useMemo(() => clients.find(c => c.id === selectedClientId), [clients, selectedClientId]);
+  const totalValue = useMemo(() => cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0), [cart]);
 
   const formatCurrency = (value: number) => {
     return (value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -259,8 +279,26 @@ export default function Vendas() {
       <Header showBack bgColor="bg-[#4a154b]" textColor="text-white" />
       
       <main className="max-w-2xl mx-auto p-4 space-y-6 pb-24">
-        {/* CLIENT SECTION */}
-        <section className="space-y-3">
+        {/* TABS */}
+        <div className="flex bg-white rounded-xl p-1 border border-primary/10 shadow-sm">
+          <button 
+            onClick={() => setActiveTab('nova')}
+            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${activeTab === 'nova' ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            Nova Venda
+          </button>
+          <button 
+            onClick={() => setActiveTab('historico')}
+            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${activeTab === 'historico' ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            Histórico
+          </button>
+        </div>
+
+        {activeTab === 'nova' ? (
+          <>
+            {/* CLIENT SECTION */}
+            <section className="space-y-3">
           <div className="flex justify-between items-center">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-primary italic">Dados do Cliente</h3>
             {!isAddingClient && (
@@ -518,6 +556,69 @@ export default function Vendas() {
             Finalizar Venda
           </button>
         </div>
+        </>
+        ) : (
+          <section className="space-y-4">
+            <div className="bg-white p-4 rounded-xl border border-primary/10 shadow-sm space-y-3">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-primary italic mb-2">Filtros</h3>
+              <div className="flex gap-2">
+                <input 
+                  type="date" 
+                  value={filterDate}
+                  onChange={(e) => setFilterDate(e.target.value)}
+                  className="flex-1 rounded-lg border border-primary/20 bg-background-light focus:border-primary focus:ring-1 focus:ring-primary h-10 px-3 outline-none text-sm text-slate-700"
+                />
+                <input 
+                  type="text" 
+                  placeholder="Nome do cliente" 
+                  value={filterClient}
+                  onChange={(e) => setFilterClient(e.target.value)}
+                  className="flex-1 rounded-lg border border-primary/20 bg-background-light focus:border-primary focus:ring-1 focus:ring-primary h-10 px-3 outline-none text-sm text-slate-700"
+                />
+              </div>
+              {(filterDate || filterClient) && (
+                <button 
+                  onClick={() => { setFilterDate(''); setFilterClient(''); }}
+                  className="text-xs text-primary font-bold hover:underline"
+                >
+                  Limpar Filtros
+                </button>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              {filteredSales.length === 0 ? (
+                <div className="text-center p-8 bg-white rounded-xl border border-primary/10">
+                  <p className="text-slate-500">Nenhuma venda encontrada.</p>
+                </div>
+              ) : (
+                filteredSales.map(sale => {
+                  const client = clients.find(c => c.id === sale.clientId);
+                  return (
+                    <div key={sale.id} className="bg-white p-4 rounded-xl border border-primary/10 shadow-sm space-y-2">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-bold text-slate-900">{client?.name || 'Cliente Desconhecido'}</p>
+                          <p className="text-xs text-slate-500">{new Date(sale.date).toLocaleString('pt-BR')}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold text-primary">{formatCurrency(sale.totalValue)}</p>
+                          <p className="text-xs text-slate-500">{sale.paymentMethod}</p>
+                        </div>
+                      </div>
+                      {sale.remainingValue > 0 && (
+                        <div className="flex justify-between items-center text-xs pt-2 border-t border-slate-100">
+                          <span className="text-emerald-600 font-semibold">Pago: {formatCurrency(sale.amountPaid)}</span>
+                          <span className="text-orange-500 font-bold">Fiado: {formatCurrency(sale.remainingValue)}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </section>
+        )}
       </main>
 
       {/* SUMMARY MODAL */}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Header from '@/components/Header';
 import { Banknote, Star, TrendingUp, ArrowUp, Wallet, PackageOpen } from 'lucide-react';
 import { api, Product, Sale } from '@/lib/api';
@@ -33,87 +33,90 @@ export default function Dashboard() {
   if (!mounted) return null; // Prevent hydration mismatch
 
   // --- Calculations ---
+  const { totalRevenue, totalPending, bestSellerName, bestSellerCount, last6Months, maxMonthlyRevenue, currentMonthRevenue, growth, topCategories } = useMemo(() => {
+    // 1. Totals
+    const totalRevenue = sales.reduce((acc, sale) => acc + sale.totalValue, 0);
+    const totalPending = sales.reduce((acc, sale) => acc + sale.remainingValue, 0);
 
-  // 1. Totals
-  const totalRevenue = sales.reduce((acc, sale) => acc + sale.totalValue, 0);
-  const totalPending = sales.reduce((acc, sale) => acc + sale.remainingValue, 0);
+    // 2. Best Seller
+    const productSales: Record<string, number> = {};
+    sales.forEach(sale => {
+      if (sale.items) {
+        sale.items.forEach(item => {
+          productSales[item.name] = (productSales[item.name] || 0) + item.quantity;
+        });
+      } else if (sale.productId) {
+        const p = products.find(p => p.id === sale.productId);
+        if (p) productSales[p.name] = (productSales[p.name] || 0) + 1;
+      }
+    });
+    
+    const sortedProducts = Object.entries(productSales).sort((a, b) => b[1] - a[1]);
+    const bestSellerName = sortedProducts.length > 0 ? sortedProducts[0][0] : 'Nenhum';
+    const bestSellerCount = sortedProducts.length > 0 ? sortedProducts[0][1] : 0;
 
-  // 2. Best Seller
-  const productSales: Record<string, number> = {};
-  sales.forEach(sale => {
-    if (sale.items) {
-      sale.items.forEach(item => {
-        productSales[item.name] = (productSales[item.name] || 0) + item.quantity;
-      });
-    } else if (sale.productId) {
-      const p = products.find(p => p.id === sale.productId);
-      if (p) productSales[p.name] = (productSales[p.name] || 0) + 1;
-    }
-  });
-  
-  const sortedProducts = Object.entries(productSales).sort((a, b) => b[1] - a[1]);
-  const bestSellerName = sortedProducts.length > 0 ? sortedProducts[0][0] : 'Nenhum';
-  const bestSellerCount = sortedProducts.length > 0 ? sortedProducts[0][1] : 0;
-
-  // 3. Monthly Revenue (Last 6 months)
-  const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-  const currentDate = new Date();
-  
-  const last6Months = Array.from({ length: 6 }).map((_, i) => {
-    const d = new Date(currentDate.getFullYear(), currentDate.getMonth() - 5 + i, 1);
-    return { 
-      month: months[d.getMonth()], 
-      year: d.getFullYear(), 
-      revenue: 0,
-      isCurrent: i === 5
-    };
-  });
-
-  sales.forEach(sale => {
-    const d = new Date(sale.date);
-    const monthObj = last6Months.find(m => m.month === months[d.getMonth()] && m.year === d.getFullYear());
-    if (monthObj) {
-      monthObj.revenue += sale.totalValue;
-    }
-  });
-
-  const maxMonthlyRevenue = Math.max(...last6Months.map(m => m.revenue), 100); // Minimum 100 to avoid div by 0
-  const currentMonthRevenue = last6Months[5].revenue;
-  const previousMonthRevenue = last6Months[4].revenue;
-  
-  let growth = 0;
-  if (previousMonthRevenue > 0) {
-    growth = ((currentMonthRevenue - previousMonthRevenue) / previousMonthRevenue) * 100;
-  }
-
-  // 4. Top Categories
-  const categoryRevenue: Record<string, number> = {};
-  sales.forEach(sale => {
-    if (sale.items) {
-      sale.items.forEach(item => {
-        const p = products.find(p => p.id === item.productId);
-        const cat = p?.category || 'Outros';
-        categoryRevenue[cat] = (categoryRevenue[cat] || 0) + (item.price * item.quantity);
-      });
-    } else if (sale.productId) {
-      const p = products.find(p => p.id === sale.productId);
-      const cat = p?.category || 'Outros';
-      categoryRevenue[cat] = (categoryRevenue[cat] || 0) + sale.totalValue;
-    }
-  });
-
-  const topCategories = Object.entries(categoryRevenue)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
-    .map(([name, value], index) => {
-      const colors = ['bg-gold', 'bg-primary/60', 'bg-primary/30'];
-      return {
-        name,
-        value,
-        percent: totalRevenue > 0 ? (value / totalRevenue) * 100 : 0,
-        color: colors[index] || 'bg-slate-300'
+    // 3. Monthly Revenue (Last 6 months)
+    const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    const currentDate = new Date();
+    
+    const last6Months = Array.from({ length: 6 }).map((_, i) => {
+      const d = new Date(currentDate.getFullYear(), currentDate.getMonth() - 5 + i, 1);
+      return { 
+        month: months[d.getMonth()], 
+        year: d.getFullYear(), 
+        revenue: 0,
+        isCurrent: i === 5
       };
     });
+
+    sales.forEach(sale => {
+      const d = new Date(sale.date);
+      const monthObj = last6Months.find(m => m.month === months[d.getMonth()] && m.year === d.getFullYear());
+      if (monthObj) {
+        monthObj.revenue += sale.totalValue;
+      }
+    });
+
+    const maxMonthlyRevenue = Math.max(...last6Months.map(m => m.revenue), 100); // Minimum 100 to avoid div by 0
+    const currentMonthRevenue = last6Months[5].revenue;
+    const previousMonthRevenue = last6Months[4].revenue;
+    
+    let growth = 0;
+    if (previousMonthRevenue > 0) {
+      growth = ((currentMonthRevenue - previousMonthRevenue) / previousMonthRevenue) * 100;
+    }
+
+    // 4. Top Categories
+    const categoryRevenue: Record<string, number> = {};
+    sales.forEach(sale => {
+      if (sale.items) {
+        sale.items.forEach(item => {
+          const p = products.find(p => p.id === item.productId);
+          const cat = p?.category || 'Outros';
+          categoryRevenue[cat] = (categoryRevenue[cat] || 0) + (item.price * item.quantity);
+        });
+      } else if (sale.productId) {
+        const p = products.find(p => p.id === sale.productId);
+        const cat = p?.category || 'Outros';
+        categoryRevenue[cat] = (categoryRevenue[cat] || 0) + sale.totalValue;
+      }
+    });
+
+    const topCategories = Object.entries(categoryRevenue)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([name, value], index) => {
+        const colors = ['bg-gold', 'bg-primary/60', 'bg-primary/30'];
+        return {
+          name,
+          value,
+          percent: totalRevenue > 0 ? (value / totalRevenue) * 100 : 0,
+          color: colors[index] || 'bg-slate-300'
+        };
+      });
+
+    return { totalRevenue, totalPending, bestSellerName, bestSellerCount, last6Months, maxMonthlyRevenue, currentMonthRevenue, growth, topCategories };
+  }, [sales, products]);
 
   const formatCurrency = (value: number) => (value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
