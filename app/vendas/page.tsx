@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Header from '@/components/Header';
-import { ChevronDown, ChevronUp, Search, ShoppingCart, QrCode, Link as LinkIcon, Info, Plus, User, Package, Wallet, MapPin, CheckCircle2, X, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Search, ShoppingCart, QrCode, Link as LinkIcon, Info, Plus, User, Package, Wallet, MapPin, CheckCircle2, X, Trash2, Edit, MessageCircle, Banknote } from 'lucide-react';
 import { api, Client, Product, Sale, SaleItem } from '@/lib/api';
 
 interface CartItem {
@@ -62,6 +62,7 @@ export default function Vendas() {
   const [filterDate, setFilterDate] = useState('');
   const [filterClient, setFilterClient] = useState('');
   const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
+  const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
 
   const clientsById = useMemo(() => {
     const map: Record<string, Client> = {};
@@ -228,17 +229,32 @@ export default function Vendas() {
         quantity: item.quantity
       }));
 
-      const newSale = await api.addSale({
-        clientId: selectedClientId,
-        totalValue,
-        amountPaid: paid,
-        remainingValue: remaining,
-        paymentMethod,
-        date: new Date().toISOString()
-      }, saleItems);
+      if (editingSaleId) {
+        const updatedSale = await api.updateSaleWithItems(editingSaleId, {
+          clientId: selectedClientId,
+          totalValue,
+          amountPaid: paid,
+          remainingValue: remaining,
+          paymentMethod,
+        }, saleItems);
 
-      setSales([...sales, newSale]);
-      setCurrentSale(newSale);
+        setSales(sales.map(s => s.id === editingSaleId ? updatedSale : s));
+        setCurrentSale(updatedSale);
+        setEditingSaleId(null);
+      } else {
+        const newSale = await api.addSale({
+          clientId: selectedClientId,
+          totalValue,
+          amountPaid: paid,
+          remainingValue: remaining,
+          paymentMethod,
+          date: new Date().toISOString()
+        }, saleItems);
+
+        setSales([...sales, newSale]);
+        setCurrentSale(newSale);
+      }
+      
       setShowSummary(true);
     } catch (error: any) {
       console.error('Error finalizing sale:', error);
@@ -246,8 +262,50 @@ export default function Vendas() {
     }
   };
 
-  const handleWhatsApp = () => {
-    if (!currentSale || !selectedClient) return;
+  const handleEditSale = (sale: Sale) => {
+    setEditingSaleId(sale.id);
+    setSelectedClientId(sale.clientId);
+    setPaymentMethod(sale.paymentMethod);
+    
+    if (sale.amountPaid < sale.totalValue) {
+      setIsPartialPayment(true);
+      setAmountPaid(sale.amountPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    } else {
+      setIsPartialPayment(false);
+      setAmountPaid('');
+    }
+
+    // Reconstruct cart
+    if (sale.items && sale.items.length > 0) {
+      const newCart: CartItem[] = sale.items.map(item => ({
+        product: {
+          id: item.productId,
+          name: item.name,
+          price: item.price,
+          category: 'Outros', // Fallback
+          quantity: 0, // Fallback
+          isFavorite: false // Fallback
+        },
+        quantity: item.quantity
+      }));
+      setCart(newCart);
+    } else if (sale.productId) {
+      // Legacy sale support
+      const product = products.find(p => p.id === sale.productId);
+      if (product) {
+        setCart([{ product, quantity: 1 }]);
+      }
+    }
+
+    setActiveTab('nova');
+  };
+
+  const handleWhatsApp = (saleToSend?: Sale) => {
+    const sale = saleToSend || currentSale;
+    if (!sale) return;
+    
+    const client = clientsById[sale.clientId] || selectedClient;
+    if (!client) return;
 
     // Using Unicode escapes to prevent encoding issues on different devices/browsers
     const emojiFlower = '\uD83C\uDF38';
@@ -257,37 +315,39 @@ export default function Vendas() {
     const emojiHourglass = '\u23F3';
     const emojiSparkles = '\u2728';
 
-    let message = `Olá ${selectedClient.name}! ${emojiFlower}\n\n`;
+    let message = `Olá ${client.name}! ${emojiFlower}\n\n`;
     message += `Aqui está o resumo da sua compra:\n`;
     
-    currentSale.items?.forEach(item => {
+    sale.items?.forEach(item => {
       message += `${emojiBag} ${item.quantity}x *${item.name}* - ${formatCurrency(item.price * item.quantity)}\n`;
     });
     
-    message += `\n${emojiMoney} Valor Total: *${formatCurrency(currentSale.totalValue)}*\n\n`;
+    message += `\n${emojiMoney} Valor Total: *${formatCurrency(sale.totalValue)}*\n\n`;
 
-    if (currentSale.remainingValue > 0) {
-      message += `${emojiCheck} Valor Pago: *${formatCurrency(currentSale.amountPaid)}*\n`;
-      message += `${emojiHourglass} Restante a pagar: *${formatCurrency(currentSale.remainingValue)}* (para o próximo mês)\n\n`;
+    if (sale.remainingValue > 0) {
+      message += `${emojiCheck} Valor Pago: *${formatCurrency(sale.amountPaid)}*\n`;
+      message += `${emojiHourglass} Restante a pagar: *${formatCurrency(sale.remainingValue)}* (para o próximo mês)\n\n`;
     }
 
-    message += `Forma de pagamento escolhida: *${currentSale.paymentMethod}*\n\n`;
+    message += `Forma de pagamento escolhida: *${sale.paymentMethod}*\n\n`;
     message += `Qualquer dúvida, estou à disposição! ${emojiSparkles}`;
 
     // Replace non-breaking spaces (generated by toLocaleString) with regular spaces
     // and ensure newlines are CRLF for maximum compatibility with WhatsApp
     const cleanMessage = message.replace(/[\u00A0\u202F]/g, ' ').replace(/\n/g, '\r\n');
     const encodedMessage = encodeURIComponent(cleanMessage);
-    const whatsappUrl = `https://wa.me/55${selectedClient.phone}?text=${encodedMessage}`;
+    const whatsappUrl = `https://wa.me/55${client.phone}?text=${encodedMessage}`;
     
     window.open(whatsappUrl, '_blank');
     
-    // Reset form after sending
-    setShowSummary(false);
-    setSelectedClientId('');
-    setCart([]);
-    setIsPartialPayment(false);
-    setAmountPaid('');
+    // Reset form after sending only if it's the current sale
+    if (!saleToSend) {
+      setShowSummary(false);
+      setSelectedClientId('');
+      setCart([]);
+      setIsPartialPayment(false);
+      setAmountPaid('');
+    }
   };
 
   return (
@@ -301,7 +361,7 @@ export default function Vendas() {
             onClick={() => setActiveTab('nova')}
             className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${activeTab === 'nova' ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-50'}`}
           >
-            Nova Venda
+            {editingSaleId ? 'Editar Venda' : 'Nova Venda'}
           </button>
           <button 
             onClick={() => setActiveTab('historico')}
@@ -497,11 +557,11 @@ export default function Vendas() {
         {/* PAYMENT SECTION */}
         <section className="space-y-4">
           <h3 className="text-sm font-semibold uppercase tracking-wider text-primary italic">Forma de Pagamento</h3>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             <label className="cursor-pointer group">
               <input type="radio" name="payment" value="Pix" checked={paymentMethod === 'Pix'} onChange={(e) => setPaymentMethod(e.target.value)} className="peer hidden" />
               <div className="flex flex-col items-center justify-center p-4 rounded-xl border-2 border-primary/10 bg-white peer-checked:border-gold peer-checked:bg-gradient-to-br peer-checked:from-primary/5 peer-checked:to-gold/10 transition-all group-hover:bg-primary/5">
-                <QrCode className={paymentMethod === 'Pix' ? 'text-gold mb-2' : 'text-primary mb-2'} size={32} />
+                <QrCode className={paymentMethod === 'Pix' ? 'text-gold mb-2' : 'text-primary mb-2'} size={24} />
                 <span className="text-sm font-semibold">Pix</span>
               </div>
             </label>
@@ -509,8 +569,40 @@ export default function Vendas() {
             <label className="cursor-pointer group">
               <input type="radio" name="payment" value="Link de Cartão" checked={paymentMethod === 'Link de Cartão'} onChange={(e) => setPaymentMethod(e.target.value)} className="peer hidden" />
               <div className="flex flex-col items-center justify-center p-4 rounded-xl border-2 border-primary/10 bg-white peer-checked:border-gold peer-checked:bg-gradient-to-br peer-checked:from-primary/5 peer-checked:to-gold/10 transition-all group-hover:bg-primary/5">
-                <LinkIcon className={paymentMethod === 'Link de Cartão' ? 'text-gold mb-2' : 'text-primary mb-2'} size={32} />
+                <LinkIcon className={paymentMethod === 'Link de Cartão' ? 'text-gold mb-2' : 'text-primary mb-2'} size={24} />
                 <span className="text-sm font-semibold">Link de Cartão</span>
+              </div>
+            </label>
+
+            <label className="cursor-pointer group">
+              <input type="radio" name="payment" value="À Vista" checked={paymentMethod === 'À Vista'} onChange={(e) => setPaymentMethod(e.target.value)} className="peer hidden" />
+              <div className="flex flex-col items-center justify-center p-4 rounded-xl border-2 border-primary/10 bg-white peer-checked:border-gold peer-checked:bg-gradient-to-br peer-checked:from-primary/5 peer-checked:to-gold/10 transition-all group-hover:bg-primary/5">
+                <Banknote className={paymentMethod === 'À Vista' ? 'text-gold mb-2' : 'text-primary mb-2'} size={24} />
+                <span className="text-sm font-semibold">À Vista</span>
+              </div>
+            </label>
+
+            <label className="cursor-pointer group">
+              <input type="radio" name="payment" value="Parcelado 2x" checked={paymentMethod === 'Parcelado 2x'} onChange={(e) => setPaymentMethod(e.target.value)} className="peer hidden" />
+              <div className="flex flex-col items-center justify-center p-4 rounded-xl border-2 border-primary/10 bg-white peer-checked:border-gold peer-checked:bg-gradient-to-br peer-checked:from-primary/5 peer-checked:to-gold/10 transition-all group-hover:bg-primary/5">
+                <span className={`text-lg font-black mb-1 ${paymentMethod === 'Parcelado 2x' ? 'text-gold' : 'text-primary'}`}>2x</span>
+                <span className="text-sm font-semibold text-center">Parcelado</span>
+              </div>
+            </label>
+
+            <label className="cursor-pointer group">
+              <input type="radio" name="payment" value="Parcelado 3x" checked={paymentMethod === 'Parcelado 3x'} onChange={(e) => setPaymentMethod(e.target.value)} className="peer hidden" />
+              <div className="flex flex-col items-center justify-center p-4 rounded-xl border-2 border-primary/10 bg-white peer-checked:border-gold peer-checked:bg-gradient-to-br peer-checked:from-primary/5 peer-checked:to-gold/10 transition-all group-hover:bg-primary/5">
+                <span className={`text-lg font-black mb-1 ${paymentMethod === 'Parcelado 3x' ? 'text-gold' : 'text-primary'}`}>3x</span>
+                <span className="text-sm font-semibold text-center">Parcelado</span>
+              </div>
+            </label>
+
+            <label className="cursor-pointer group">
+              <input type="radio" name="payment" value="Parcelado 4x" checked={paymentMethod === 'Parcelado 4x'} onChange={(e) => setPaymentMethod(e.target.value)} className="peer hidden" />
+              <div className="flex flex-col items-center justify-center p-4 rounded-xl border-2 border-primary/10 bg-white peer-checked:border-gold peer-checked:bg-gradient-to-br peer-checked:from-primary/5 peer-checked:to-gold/10 transition-all group-hover:bg-primary/5">
+                <span className={`text-lg font-black mb-1 ${paymentMethod === 'Parcelado 4x' ? 'text-gold' : 'text-primary'}`}>4x</span>
+                <span className="text-sm font-semibold text-center">Parcelado</span>
               </div>
             </label>
           </div>
@@ -569,8 +661,24 @@ export default function Vendas() {
             onClick={handleFinalizarVenda}
             className="w-full h-14 bg-gradient-to-r from-primary via-[#a63499] to-primary text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all border-b-4 border-gold/50"
           >
-            Finalizar Venda
+            {editingSaleId ? 'Salvar Alterações' : 'Finalizar Venda'}
           </button>
+          
+          {editingSaleId && (
+            <button 
+              onClick={() => {
+                setEditingSaleId(null);
+                setSelectedClientId('');
+                setCart([]);
+                setIsPartialPayment(false);
+                setAmountPaid('');
+                setActiveTab('historico');
+              }}
+              className="w-full h-12 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-50 transition-all"
+            >
+              Cancelar Edição
+            </button>
+          )}
         </div>
         </>
         ) : (
@@ -664,6 +772,29 @@ export default function Vendas() {
                               {sale.productId ? 'Produto legado (sem detalhes)' : 'Nenhum produto registrado nesta venda.'}
                             </p>
                           )}
+                          
+                          <div className="flex gap-2 mt-4 pt-4 border-t border-slate-200">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditSale(sale);
+                              }}
+                              className="flex-1 flex items-center justify-center gap-2 bg-white border border-primary/20 text-primary hover:bg-primary/5 py-2 rounded-lg text-sm font-bold transition-colors"
+                            >
+                              <Edit size={16} />
+                              Editar Venda
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleWhatsApp(sale);
+                              }}
+                              className="flex-1 flex items-center justify-center gap-2 bg-[#25D366] text-white hover:bg-[#20bd5a] py-2 rounded-lg text-sm font-bold transition-colors shadow-sm"
+                            >
+                              <MessageCircle size={16} />
+                              Reenviar Recibo
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -734,7 +865,7 @@ export default function Vendas() {
               </div>
 
               <button 
-                onClick={handleWhatsApp}
+                onClick={() => handleWhatsApp()}
                 className="w-full h-14 mt-6 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all"
               >
                 <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">

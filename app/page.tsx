@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Header from '@/components/Header';
-import { Banknote, Star, TrendingUp, TrendingDown, ArrowUp, Wallet, PackageOpen } from 'lucide-react';
+import { Banknote, Star, TrendingUp, TrendingDown, ArrowUp, Wallet, PackageOpen, Plus, Users, Bell } from 'lucide-react';
 import { api, Product, Sale } from '@/lib/api';
+import Link from 'next/link';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 export default function Dashboard() {
   const [mounted, setMounted] = useState(false);
@@ -125,6 +127,9 @@ export default function Dashboard() {
 
   const formatCurrency = (value: number) => (value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
+  const pendingPercentage = totalRevenue > 0 ? ((totalPending / totalRevenue) * 100).toFixed(1) : '0.0';
+  const isPendingHigh = Number(pendingPercentage) > 30;
+
   return (
     <div className="min-h-screen bg-background-light">
       <Header 
@@ -141,16 +146,52 @@ export default function Dashboard() {
           <div className="flex justify-center items-center h-64">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
           </div>
+        ) : sales.length === 0 ? (
+          <div className="flex flex-col items-center justify-center text-center p-8 bg-white rounded-2xl border border-primary/10 shadow-sm mt-10">
+            <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+              <Banknote className="text-primary" size={40} />
+            </div>
+            <h2 className="text-2xl font-bold text-slate-800 mb-2">Bem-vindo ao seu Dashboard!</h2>
+            <p className="text-slate-500 mb-8 max-w-sm">
+              Seu painel ganhará vida aqui. Que tal registrar sua primeira venda para começarmos?
+            </p>
+            <Link href="/vendas" className="bg-primary hover:bg-primary/90 text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-primary/30 transition-all flex items-center gap-2">
+              <Plus size={20} />
+              Registrar Primeira Venda
+            </Link>
+          </div>
         ) : (
           <>
+            {/* Quick Actions */}
+            <div className="grid grid-cols-3 gap-3">
+              <Link href="/vendas" className="flex flex-col items-center justify-center gap-2 bg-white p-3 rounded-xl border border-primary/10 shadow-sm hover:bg-slate-50 transition-colors">
+                <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
+                  <Plus size={20} />
+                </div>
+                <span className="text-xs font-bold text-slate-700">Nova Venda</span>
+              </Link>
+              <Link href="/clientes" className="flex flex-col items-center justify-center gap-2 bg-white p-3 rounded-xl border border-primary/10 shadow-sm hover:bg-slate-50 transition-colors">
+                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                  <Users size={20} />
+                </div>
+                <span className="text-xs font-bold text-slate-700">Novo Cliente</span>
+              </Link>
+              <Link href="/clientes" className="flex flex-col items-center justify-center gap-2 bg-white p-3 rounded-xl border border-primary/10 shadow-sm hover:bg-slate-50 transition-colors">
+                <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600">
+                  <Bell size={20} />
+                </div>
+                <span className="text-xs font-bold text-slate-700">Cobrar Fiados</span>
+              </Link>
+            </div>
+
             <div className="flex flex-wrap gap-4">
-              {/* Total Sales */}
+              {/* Total Sales -> Vendas do Mês */}
               <div className="flex min-w-[280px] flex-1 flex-col gap-3 rounded-xl p-6 bg-white shadow-sm border border-primary/5">
                 <div className="flex items-center justify-between">
-                  <p className="text-slate-500 text-sm font-medium">Total de Vendas</p>
+                  <p className="text-slate-500 text-sm font-medium">Vendas do Mês</p>
                   <Banknote className="text-primary" size={20} />
                 </div>
-                <p className="text-3xl font-extrabold leading-tight text-gold">{formatCurrency(totalRevenue)}</p>
+                <p className="text-3xl font-extrabold leading-tight text-gold">{formatCurrency(currentMonthRevenue)}</p>
                 <div className="flex items-center gap-1">
                   {growth >= 0 ? (
                     <TrendingUp className="text-emerald-500" size={16} />
@@ -163,6 +204,22 @@ export default function Dashboard() {
                 </div>
               </div>
 
+              {/* Pending Payments (Fiado) */}
+              <div className={`flex min-w-[280px] flex-1 flex-col gap-3 rounded-xl p-6 text-white shadow-lg transition-colors ${isPendingHigh ? 'bg-orange-500 shadow-orange-500/40' : 'bg-primary shadow-primary/40'}`}>
+                <div className="flex items-center justify-between">
+                  <p className="text-white/90 text-sm font-medium">Valores a Receber (Fiado)</p>
+                  <Wallet size={20} />
+                </div>
+                <p className="text-3xl font-extrabold leading-tight">{formatCurrency(totalPending)}</p>
+                <div className="flex items-center gap-1">
+                  <p className="text-white text-sm font-bold">
+                    {pendingPercentage}% <span className="text-white/80 font-normal">do faturamento total</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-4">
               {/* Best Seller */}
               <div className="flex min-w-[280px] flex-1 flex-col gap-3 rounded-xl p-6 bg-white shadow-sm border border-primary/5">
                 <div className="flex items-center justify-between">
@@ -177,20 +234,6 @@ export default function Dashboard() {
                   </p>
                 </div>
               </div>
-
-              {/* Pending Payments (Fiado) */}
-              <div className="flex min-w-[280px] flex-1 flex-col gap-3 rounded-xl p-6 bg-primary text-white shadow-lg shadow-primary/40">
-                <div className="flex items-center justify-between">
-                  <p className="text-white/80 text-sm font-medium">Valores a Receber (Fiado)</p>
-                  <Wallet size={20} />
-                </div>
-                <p className="text-3xl font-extrabold leading-tight">{formatCurrency(totalPending)}</p>
-                <div className="flex items-center gap-1">
-                  <p className="text-white text-sm font-bold">
-                    <span className="text-white/70 font-normal">Acompanhe suas cobranças</span>
-                  </p>
-                </div>
-              </div>
             </div>
 
             {/* Monthly Revenue Chart */}
@@ -200,42 +243,38 @@ export default function Dashboard() {
                   <h2 className="text-xl font-bold tracking-tight">Receita Mensal</h2>
                   <p className="text-slate-500 text-sm">Desempenho nos últimos 6 meses</p>
                 </div>
-                <div className="text-right">
-                  <p className="text-3xl font-black text-gold">{formatCurrency(currentMonthRevenue)}</p>
-                  <p className="text-emerald-500 text-sm font-bold flex items-center justify-end">
-                    <ArrowUp size={16} className="mr-1" />
-                    Mês Atual
-                  </p>
-                </div>
               </div>
               
-              <div className="grid grid-cols-6 gap-4 items-end h-64 px-2">
-                {last6Months.map((item, idx) => {
-                  const heightPercent = Math.max((item.revenue / maxMonthlyRevenue) * 100, 5); // min 5% height for visibility
-                  
-                  return (
-                    <div key={idx} className="flex flex-col items-center gap-3 h-full justify-end group relative">
-                      {/* Tooltip on hover */}
-                      <div className="absolute -top-8 bg-slate-800 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
-                        {formatCurrency(item.revenue)}
-                      </div>
-                      
-                      <div 
-                        className={`w-full rounded-t-lg transition-all duration-500 ${
-                          item.isCurrent 
-                            ? 'bg-gold shadow-lg shadow-gold/30' 
-                            : 'bg-primary/20 hover:bg-primary/40'
-                        }`} 
-                        style={{ height: `${heightPercent}%` }}
-                      ></div>
-                      <p className={`text-xs font-bold uppercase tracking-wider ${
-                        item.isCurrent ? 'text-gold font-black' : 'text-slate-500'
-                      }`}>
-                        {item.month}
-                      </p>
-                    </div>
-                  );
-                })}
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={last6Months} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis 
+                      dataKey="month" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#64748b', fontSize: 12, fontWeight: 600 }} 
+                      dy={10}
+                    />
+                    <YAxis 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#94a3b8', fontSize: 12 }} 
+                      tickFormatter={(value) => `R$ ${value >= 1000 ? (value/1000).toFixed(1) + 'k' : value}`}
+                    />
+                    <Tooltip 
+                      cursor={{ fill: '#f1f5f9' }}
+                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                      formatter={(value: any) => [formatCurrency(value as number), 'Receita']}
+                      labelStyle={{ fontWeight: 'bold', color: '#334155', marginBottom: '4px' }}
+                    />
+                    <Bar dataKey="revenue" radius={[6, 6, 0, 0]}>
+                      {last6Months.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.isCurrent ? '#F2A900' : '#4A154B'} fillOpacity={entry.isCurrent ? 1 : 0.7} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </div>
 

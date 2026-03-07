@@ -195,6 +195,7 @@ export const api = {
     if (updates.amountPaid !== undefined) dbSale.amount_paid = updates.amountPaid;
     if (updates.remainingValue !== undefined) dbSale.remaining_value = updates.remainingValue;
     if (updates.paymentMethod !== undefined) dbSale.payment_method = updates.paymentMethod;
+    if (updates.totalValue !== undefined) dbSale.total_value = updates.totalValue;
     
     const { data, error } = await supabase.from('sales').update(dbSale).eq('id', id).select().single();
     if (error) throw error;
@@ -208,5 +209,28 @@ export const api = {
       paymentMethod: data.payment_method,
       date: data.date
     };
+  },
+  async updateSaleWithItems(id: string, updates: Partial<Sale>, items: SaleItem[]): Promise<Sale> {
+    // 1. Update the main sale record
+    const updatedSale = await this.updateSale(id, updates);
+    
+    // 2. Delete existing items
+    const { error: deleteError } = await supabase.from('sale_items').delete().eq('sale_id', id);
+    if (deleteError) throw deleteError;
+    
+    // 3. Insert new items
+    if (items && items.length > 0) {
+      const dbItems = items.map(item => ({
+        sale_id: id,
+        product_id: item.productId,
+        quantity: item.quantity,
+        price: item.price
+      }));
+      
+      const { error: itemsError } = await supabase.from('sale_items').insert(dbItems);
+      if (itemsError) throw itemsError;
+    }
+    
+    return { ...updatedSale, items };
   }
 };

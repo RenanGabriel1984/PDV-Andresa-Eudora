@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Header from '@/components/Header';
-import { Plus, Search, MapPin, Phone, Edit2, Trash2, ChevronDown, ChevronUp, AlertCircle, ShoppingBag, User, CheckCircle } from 'lucide-react';
+import { Plus, Search, MapPin, Phone, Edit2, Trash2, ChevronDown, ChevronUp, AlertCircle, ShoppingBag, User, CheckCircle, Wallet } from 'lucide-react';
 import { api, Client, Sale, Product } from '@/lib/api';
 
 export default function Clientes() {
@@ -26,6 +26,7 @@ export default function Clientes() {
 
   // Payment state
   const [payingSaleId, setPayingSaleId] = useState<string | null>(null);
+  const [payingClientId, setPayingClientId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
 
   useEffect(() => {
@@ -108,6 +109,56 @@ export default function Clientes() {
 
   const parsePriceInput = (value: string) => {
     return parseFloat(value.replace(/\./g, '').replace(',', '.'));
+  };
+
+  const handleRegisterClientPayment = async (clientId: string, totalDebt: number) => {
+    const amount = parsePriceInput(paymentAmount);
+    if (isNaN(amount) || amount <= 0) {
+      alert('Digite um valor válido.');
+      return;
+    }
+
+    if (amount > totalDebt) {
+      alert('O valor do pagamento não pode ser maior que a dívida total.');
+      return;
+    }
+
+    try {
+      const clientSales = getClientSales(clientId)
+        .filter(s => s.remainingValue > 0)
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()); // Oldest first
+
+      let remainingPayment = amount;
+      const updatedSales = [...sales];
+
+      for (const sale of clientSales) {
+        if (remainingPayment <= 0) break;
+
+        const paymentForThisSale = Math.min(remainingPayment, sale.remainingValue);
+        const newAmountPaid = sale.amountPaid + paymentForThisSale;
+        const newRemainingValue = sale.remainingValue - paymentForThisSale;
+
+        const updatedSale = await api.updateSale(sale.id, {
+          amountPaid: newAmountPaid,
+          remainingValue: newRemainingValue
+        });
+
+        const index = updatedSales.findIndex(s => s.id === updatedSale.id);
+        if (index !== -1) {
+          updatedSales[index] = updatedSale;
+        }
+
+        remainingPayment -= paymentForThisSale;
+      }
+
+      setSales(updatedSales);
+      setPayingClientId(null);
+      setPaymentAmount('');
+      alert('Pagamento registrado com sucesso!');
+    } catch (error) {
+      console.error('Error registering client payment:', error);
+      alert('Erro ao registrar pagamento do cliente.');
+    }
   };
 
   const handleRegisterPayment = async (saleId: string, currentAmountPaid: number, remainingValue: number) => {
@@ -388,14 +439,39 @@ export default function Clientes() {
                     </div>
 
                     {/* Action Buttons */}
-                    <div className="flex gap-2 mt-4 pt-4 border-t border-slate-200">
-                      {deletingId === client.id ? (
-                        <div className="flex-1 flex gap-2">
+                    <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-slate-200">
+                      {payingClientId === client.id ? (
+                        <div className="flex flex-col gap-2 bg-emerald-50 p-3 rounded-xl border border-emerald-100">
+                          <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Registrar Pagamento (Dívida Total: {formatCurrency(openBalance)})</p>
+                          <div className="flex gap-2 items-center">
+                            <input 
+                              type="text" 
+                              placeholder="R$ 0,00" 
+                              value={paymentAmount}
+                              onChange={(e) => setPaymentAmount(formatPriceInput(e.target.value))}
+                              className="flex-1 rounded-lg border border-emerald-200 bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 h-10 px-3 outline-none text-sm font-bold text-emerald-700"
+                            />
+                            <button 
+                              onClick={() => handleRegisterClientPayment(client.id, openBalance)}
+                              className="h-10 px-4 bg-emerald-500 text-white rounded-lg text-sm font-bold hover:bg-emerald-600 transition-colors"
+                            >
+                              Salvar
+                            </button>
+                            <button 
+                              onClick={() => { setPayingClientId(null); setPaymentAmount(''); }}
+                              className="h-10 px-4 bg-slate-200 text-slate-600 rounded-lg text-sm font-bold hover:bg-slate-300 transition-colors"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      ) : deletingId === client.id ? (
+                        <div className="flex gap-2">
                           <button 
                             onClick={() => confirmDelete(client.id)}
                             className="flex-1 bg-red-500 text-white text-sm font-bold py-2 rounded-lg"
                           >
-                            Confirmar
+                            Confirmar Exclusão
                           </button>
                           <button 
                             onClick={() => setDeletingId(null)}
@@ -405,20 +481,33 @@ export default function Clientes() {
                           </button>
                         </div>
                       ) : (
-                        <>
+                        <div className="flex gap-2 flex-wrap">
+                          {openBalance > 0 && (
+                            <button 
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                setPayingClientId(client.id); 
+                                setPaymentAmount(formatPriceInput(openBalance.toFixed(2))); 
+                                setPayingSaleId(null);
+                              }}
+                              className="flex-1 flex items-center justify-center gap-2 bg-emerald-500 text-white text-sm font-bold py-2 px-4 rounded-lg hover:bg-emerald-600 transition-colors shadow-sm"
+                            >
+                              <Wallet size={16} /> Quitar Dívida
+                            </button>
+                          )}
                           <button 
                             onClick={(e) => { e.stopPropagation(); handleEdit(client); }}
-                            className="flex-1 flex items-center justify-center gap-2 bg-white border border-primary/20 text-primary text-sm font-bold py-2 rounded-lg hover:bg-primary/5 transition-colors"
+                            className="flex-1 flex items-center justify-center gap-2 bg-white border border-primary/20 text-primary text-sm font-bold py-2 px-4 rounded-lg hover:bg-primary/5 transition-colors"
                           >
                             <Edit2 size={16} /> Editar
                           </button>
                           <button 
                             onClick={(e) => { e.stopPropagation(); setDeletingId(client.id); }}
-                            className="flex-1 flex items-center justify-center gap-2 bg-white border border-red-200 text-red-500 text-sm font-bold py-2 rounded-lg hover:bg-red-50 transition-colors"
+                            className="flex-1 flex items-center justify-center gap-2 bg-white border border-red-200 text-red-500 text-sm font-bold py-2 px-4 rounded-lg hover:bg-red-50 transition-colors"
                           >
                             <Trash2 size={16} /> Excluir
                           </button>
-                        </>
+                        </div>
                       )}
                     </div>
                   </div>
