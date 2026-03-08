@@ -223,6 +223,7 @@ export const api = {
       const dbItems = items.map(item => ({
         sale_id: id,
         product_id: item.productId,
+        name: item.name,
         quantity: item.quantity,
         price: item.price
       }));

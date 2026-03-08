@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Header from '@/components/Header';
-import { Plus, Search, MapPin, Phone, Edit2, Trash2, ChevronDown, ChevronUp, AlertCircle, ShoppingBag, User, CheckCircle, Wallet } from 'lucide-react';
+import { Plus, Search, MapPin, Phone, Edit2, Trash2, ChevronDown, ChevronUp, AlertCircle, ShoppingBag, User, CheckCircle, Wallet, MessageCircle } from 'lucide-react';
 import { api, Client, Sale, Product } from '@/lib/api';
 
 export default function Clientes() {
@@ -111,6 +111,38 @@ export default function Clientes() {
     return parseFloat(value.replace(/\./g, '').replace(',', '.'));
   };
 
+  const handleSendWhatsApp = (client: Client, openBalance: number, clientSales: Sale[]) => {
+    if (!client.phone) {
+      alert('Cliente não possui telefone cadastrado.');
+      return;
+    }
+
+    const phone = client.phone.replace(/\D/g, '');
+    if (phone.length < 10) {
+      alert('Telefone inválido para envio de WhatsApp.');
+      return;
+    }
+
+    const unpaidSales = clientSales.filter(s => s.remainingValue > 0).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+    const formatCurrency = (value: number) => (value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+    let message = `Olá, ${client.name}! Tudo bem?\n\n`;
+    message += `Passando para lembrar que você tem um saldo em aberto no valor de *${formatCurrency(openBalance)}*.\n\n`;
+    
+    if (unpaidSales.length > 0) {
+      message += `*Detalhes das compras em aberto:*\n`;
+      unpaidSales.forEach(sale => {
+        message += `- ${new Date(sale.date).toLocaleDateString('pt-BR')}: ${formatCurrency(sale.remainingValue)}\n`;
+      });
+    }
+
+    message += `\nQualquer dúvida, estou à disposição!`;
+
+    const url = `https://wa.me/55${phone}?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank');
+  };
+
   const handleRegisterClientPayment = async (clientId: string, totalDebt: number) => {
     const amount = parsePriceInput(paymentAmount);
     if (isNaN(amount) || amount <= 0) {
@@ -145,7 +177,7 @@ export default function Clientes() {
 
         const index = updatedSales.findIndex(s => s.id === updatedSale.id);
         if (index !== -1) {
-          updatedSales[index] = updatedSale;
+          updatedSales[index] = { ...updatedSale, items: sale.items };
         }
 
         remainingPayment -= paymentForThisSale;
@@ -357,6 +389,18 @@ export default function Clientes() {
                       <p>{client.address || 'Nenhum endereço cadastrado.'}</p>
                     </div>
 
+                    {/* Resumo Financeiro */}
+                    <div className="grid grid-cols-2 gap-2 mb-4">
+                      <div className="bg-white p-3 rounded-xl border border-slate-100 flex flex-col">
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Comprado</span>
+                        <span className="text-lg font-bold text-slate-800">{formatCurrency(clientSales.reduce((acc, s) => acc + s.totalValue, 0))}</span>
+                      </div>
+                      <div className="bg-white p-3 rounded-xl border border-slate-100 flex flex-col">
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Devendo</span>
+                        <span className={`text-lg font-bold ${openBalance > 0 ? 'text-orange-500' : 'text-emerald-500'}`}>{formatCurrency(openBalance)}</span>
+                      </div>
+                    </div>
+
                     {/* Sales History */}
                     <div className="space-y-3">
                       <h5 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
@@ -483,17 +527,25 @@ export default function Clientes() {
                       ) : (
                         <div className="flex gap-2 flex-wrap">
                           {openBalance > 0 && (
-                            <button 
-                              onClick={(e) => { 
-                                e.stopPropagation(); 
-                                setPayingClientId(client.id); 
-                                setPaymentAmount(formatPriceInput(openBalance.toFixed(2))); 
-                                setPayingSaleId(null);
-                              }}
-                              className="flex-1 flex items-center justify-center gap-2 bg-emerald-500 text-white text-sm font-bold py-2 px-4 rounded-lg hover:bg-emerald-600 transition-colors shadow-sm"
-                            >
-                              <Wallet size={16} /> Quitar Dívida
-                            </button>
+                            <>
+                              <button 
+                                onClick={(e) => { 
+                                  e.stopPropagation(); 
+                                  setPayingClientId(client.id); 
+                                  setPaymentAmount(formatPriceInput(openBalance.toFixed(2))); 
+                                  setPayingSaleId(null);
+                                }}
+                                className="flex-1 flex items-center justify-center gap-2 bg-emerald-500 text-white text-sm font-bold py-2 px-4 rounded-lg hover:bg-emerald-600 transition-colors shadow-sm"
+                              >
+                                <Wallet size={16} /> Quitar Dívida
+                              </button>
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); handleSendWhatsApp(client, openBalance, clientSales); }}
+                                className="flex-1 flex items-center justify-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-600 text-sm font-bold py-2 px-4 rounded-lg hover:bg-emerald-100 transition-colors"
+                              >
+                                <MessageCircle size={16} /> Cobrar
+                              </button>
+                            </>
                           )}
                           <button 
                             onClick={(e) => { e.stopPropagation(); handleEdit(client); }}

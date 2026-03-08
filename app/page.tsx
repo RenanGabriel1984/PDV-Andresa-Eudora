@@ -33,10 +33,11 @@ export default function Dashboard() {
   }, []);
 
   // --- Calculations ---
-  const { totalRevenue, totalPending, bestSellerName, bestSellerCount, last6Months, maxMonthlyRevenue, currentMonthRevenue, growth, topCategories } = useMemo(() => {
+  const { totalRevenue, totalPending, bestSellerName, bestSellerCount, last6Months, maxMonthlyRevenue, currentMonthRevenue, growth, topCategories, averageTicket } = useMemo(() => {
     // 1. Totals
     const totalRevenue = sales.reduce((acc, sale) => acc + sale.totalValue, 0);
     const totalPending = sales.reduce((acc, sale) => acc + sale.remainingValue, 0);
+    const averageTicket = sales.length > 0 ? totalRevenue / sales.length : 0;
 
     const productsById: Record<string, Product> = {};
     products.forEach(p => {
@@ -120,7 +121,7 @@ export default function Dashboard() {
         };
       });
 
-    return { totalRevenue, totalPending, bestSellerName, bestSellerCount, last6Months, maxMonthlyRevenue, currentMonthRevenue, growth, topCategories };
+    return { totalRevenue, totalPending, bestSellerName, bestSellerCount, last6Months, maxMonthlyRevenue, currentMonthRevenue, growth, topCategories, averageTicket };
   }, [sales, products]);
 
   if (!mounted) return null; // Prevent hydration mismatch
@@ -184,53 +185,53 @@ export default function Dashboard() {
               </Link>
             </div>
 
-            <div className="flex flex-wrap gap-4">
-              {/* Total Sales -> Vendas do Mês */}
-              <div className="flex min-w-[280px] flex-1 flex-col gap-3 rounded-xl p-6 bg-white shadow-sm border border-primary/5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Receita do Mês */}
+              <div className="flex flex-col gap-3 rounded-xl p-6 bg-white shadow-sm border border-primary/5">
                 <div className="flex items-center justify-between">
-                  <p className="text-slate-500 text-sm font-medium">Vendas do Mês</p>
+                  <p className="text-slate-500 text-sm font-medium">Receita do Mês</p>
                   <Banknote className="text-primary" size={20} />
                 </div>
                 <p className="text-3xl font-extrabold leading-tight text-gold">{formatCurrency(currentMonthRevenue)}</p>
-                <div className="flex items-center gap-1">
-                  {growth >= 0 ? (
-                    <TrendingUp className="text-emerald-500" size={16} />
-                  ) : (
-                    <TrendingDown className="text-red-500" size={16} />
-                  )}
-                  <p className={`text-sm font-bold ${growth >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                    {growth >= 0 ? '+' : ''}{growth.toFixed(1)}% <span className="text-slate-400 font-normal">vs mês passado</span>
-                  </p>
+                <div className="flex items-center justify-between mt-1">
+                  <div className="flex items-center gap-1">
+                    {growth >= 0 ? (
+                      <TrendingUp className="text-emerald-500" size={16} />
+                    ) : (
+                      <TrendingDown className="text-red-500" size={16} />
+                    )}
+                    <p className={`text-sm font-bold ${growth >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                      {growth >= 0 ? '+' : ''}{growth.toFixed(1)}% <span className="text-slate-400 font-normal">vs mês</span>
+                    </p>
+                  </div>
+                  <p className="text-xs text-slate-400 font-medium" title="Faturamento Total">Total: {formatCurrency(totalRevenue)}</p>
                 </div>
               </div>
 
-              {/* Pending Payments (Fiado) */}
-              <div className={`flex min-w-[280px] flex-1 flex-col gap-3 rounded-xl p-6 text-white shadow-lg transition-colors ${isPendingHigh ? 'bg-orange-500 shadow-orange-500/40' : 'bg-primary shadow-primary/40'}`}>
+              {/* Valores a Receber (Fiado) */}
+              <div className={`flex flex-col gap-3 rounded-xl p-6 text-white shadow-lg transition-colors ${isPendingHigh ? 'bg-orange-500 shadow-orange-500/40' : 'bg-primary shadow-primary/40'}`}>
                 <div className="flex items-center justify-between">
-                  <p className="text-white/90 text-sm font-medium">Valores a Receber (Fiado)</p>
+                  <p className="text-white/90 text-sm font-medium">Valores a Receber</p>
                   <Wallet size={20} />
                 </div>
                 <p className="text-3xl font-extrabold leading-tight">{formatCurrency(totalPending)}</p>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 mt-1">
                   <p className="text-white text-sm font-bold">
                     {pendingPercentage}% <span className="text-white/80 font-normal">do faturamento total</span>
                   </p>
                 </div>
               </div>
-            </div>
 
-            <div className="flex flex-wrap gap-4">
-              {/* Best Seller */}
-              <div className="flex min-w-[280px] flex-1 flex-col gap-3 rounded-xl p-6 bg-white shadow-sm border border-primary/5">
+              {/* Ticket Médio */}
+              <div className="flex flex-col gap-3 rounded-xl p-6 bg-white shadow-sm border border-primary/5">
                 <div className="flex items-center justify-between">
-                  <p className="text-slate-500 text-sm font-medium">Produto Mais Vendido</p>
-                  <Star className="text-primary" size={20} />
+                  <p className="text-slate-500 text-sm font-medium">Ticket Médio</p>
+                  <Banknote className="text-primary" size={20} />
                 </div>
-                <p className="text-2xl font-extrabold leading-tight truncate" title={bestSellerName}>{bestSellerName}</p>
-                <div className="flex items-center gap-1">
-                  <PackageOpen className="text-primary/60" size={16} />
-                  <p className="text-slate-600 text-sm font-bold">
-                    {bestSellerCount} <span className="text-slate-400 font-normal">unidades vendidas</span>
+                <p className="text-3xl font-extrabold leading-tight text-slate-800">{formatCurrency(averageTicket)}</p>
+                <div className="flex items-center gap-1 mt-1">
+                  <p className="text-slate-500 text-sm">
+                    Média por venda
                   </p>
                 </div>
               </div>
@@ -278,30 +279,50 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Top Categories */}
-            <div className="rounded-xl bg-white p-6 shadow-sm border border-primary/5">
-              <h3 className="text-lg font-bold mb-4">Categorias em Destaque</h3>
-              
-              {topCategories.length === 0 ? (
-                <p className="text-sm text-slate-500 italic">Nenhuma venda registrada ainda para calcular categorias.</p>
-              ) : (
-                <div className="space-y-4">
-                  {topCategories.map((cat) => (
-                    <div key={cat.name} className="space-y-2">
-                      <div className="flex justify-between text-sm font-medium">
-                        <span>{cat.name}</span>
-                        <span>{formatCurrency(cat.value)}</span>
-                      </div>
-                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                        <div 
-                          className={`${cat.color} h-full rounded-full transition-all duration-1000`} 
-                          style={{ width: `${cat.percent}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  ))}
+            {/* Bottom Row: Top Produtos & Categorias */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Top Produtos */}
+              <div className="rounded-xl bg-white p-6 shadow-sm border border-primary/5 flex flex-col">
+                <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                  <Star className="text-primary" size={20} />
+                  Produto Mais Vendido
+                </h3>
+                <div className="flex flex-col items-center justify-center p-6 bg-slate-50 rounded-xl border border-slate-100 flex-1">
+                  <p className="text-2xl font-extrabold text-center text-slate-800 line-clamp-2" title={bestSellerName}>{bestSellerName}</p>
+                  <div className="flex items-center gap-2 mt-3">
+                    <PackageOpen className="text-primary/60" size={16} />
+                    <p className="text-slate-600 text-sm font-bold">
+                      {bestSellerCount} <span className="text-slate-400 font-normal">unidades vendidas</span>
+                    </p>
+                  </div>
                 </div>
-              )}
+              </div>
+
+              {/* Categorias em Destaque */}
+              <div className="rounded-xl bg-white p-6 shadow-sm border border-primary/5">
+                <h3 className="text-lg font-bold mb-4">Categorias em Destaque</h3>
+                
+                {topCategories.length === 0 ? (
+                  <p className="text-sm text-slate-500 italic">Nenhuma venda registrada ainda para calcular categorias.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {topCategories.map((cat) => (
+                      <div key={cat.name} className="space-y-2">
+                        <div className="flex justify-between text-sm font-medium">
+                          <span>{cat.name}</span>
+                          <span>{formatCurrency(cat.value)}</span>
+                        </div>
+                        <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                          <div 
+                            className={`${cat.color} h-full rounded-full transition-all duration-1000`} 
+                            style={{ width: `${cat.percent}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </>
         )}
