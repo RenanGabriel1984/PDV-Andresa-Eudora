@@ -233,5 +233,12 @@ export const api = {
     }
     
     return { ...updatedSale, items };
+  },
+  async deleteSale(id: string): Promise<void> {
+    const { error: itemsError } = await supabase.from('sale_items').delete().eq('sale_id', id);
+    if (itemsError) throw itemsError;
+    
+    const { error: saleError } = await supabase.from('sales').delete().eq('id', id);
+    if (saleError) throw saleError;
   }
 };

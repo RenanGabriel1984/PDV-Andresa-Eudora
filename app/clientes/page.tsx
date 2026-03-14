@@ -248,6 +248,17 @@ export default function Clientes() {
     }
   };
 
+  const handleDeleteSale = async (saleId: string) => {
+    if (!confirm('Tem certeza que deseja excluir esta venda? Esta ação não pode ser desfeita e o saldo do cliente será recalculado.')) return;
+    try {
+      await api.deleteSale(saleId);
+      setSales(sales.filter(s => s.id !== saleId));
+    } catch (error) {
+      console.error('Error deleting sale:', error);
+      alert('Erro ao excluir a venda.');
+    }
+  };
+
   const salesByClient = useMemo(() => {
     const map: Record<string, Sale[]> = {};
     sales.forEach(sale => {
@@ -442,10 +453,13 @@ export default function Clientes() {
                           {clientSales.map(sale => (
                             <div key={sale.id} className="bg-white p-3 rounded-xl border border-slate-100 flex flex-col gap-2">
                               <div className="flex justify-between items-start">
-                                <div>
+                                <div className="flex items-center gap-2">
                                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                                     {new Date(sale.date).toLocaleDateString('pt-BR')}
                                   </p>
+                                  <button onClick={() => handleDeleteSale(sale.id)} className="text-red-400 hover:text-red-600 p-1" title="Excluir Venda">
+                                    <Trash2 size={14} />
+                                  </button>
                                 </div>
                                 <div className="text-right">
                                   <p className="text-sm font-bold text-primary">{formatCurrency(sale.totalValue)}</p>

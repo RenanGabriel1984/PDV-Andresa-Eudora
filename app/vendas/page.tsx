@@ -262,6 +262,17 @@ export default function Vendas() {
     }
   };
 
+  const handleDeleteSale = async (saleId: string) => {
+    if (!confirm('Tem certeza que deseja excluir esta venda? Esta ação não pode ser desfeita e o saldo do cliente será recalculado.')) return;
+    try {
+      await api.deleteSale(saleId);
+      setSales(sales.filter(s => s.id !== saleId));
+    } catch (error) {
+      console.error('Error deleting sale:', error);
+      alert('Erro ao excluir a venda.');
+    }
+  };
+
   const handleEditSale = (sale: Sale) => {
     setEditingSaleId(sale.id);
     setSelectedClientId(sale.clientId);
@@ -773,26 +784,36 @@ export default function Vendas() {
                             </p>
                           )}
                           
-                          <div className="flex gap-2 mt-4 pt-4 border-t border-slate-200">
+                          <div className="flex gap-2 mt-4 pt-4 border-t border-slate-200 flex-wrap">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleEditSale(sale);
                               }}
-                              className="flex-1 flex items-center justify-center gap-2 bg-white border border-primary/20 text-primary hover:bg-primary/5 py-2 rounded-lg text-sm font-bold transition-colors"
+                              className="flex-1 min-w-[120px] flex items-center justify-center gap-2 bg-white border border-primary/20 text-primary hover:bg-primary/5 py-2 rounded-lg text-sm font-bold transition-colors"
                             >
                               <Edit size={16} />
-                              Editar Venda
+                              Editar
                             </button>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleWhatsApp(sale);
                               }}
-                              className="flex-1 flex items-center justify-center gap-2 bg-[#25D366] text-white hover:bg-[#20bd5a] py-2 rounded-lg text-sm font-bold transition-colors shadow-sm"
+                              className="flex-1 min-w-[120px] flex items-center justify-center gap-2 bg-[#25D366] text-white hover:bg-[#20bd5a] py-2 rounded-lg text-sm font-bold transition-colors shadow-sm"
                             >
                               <MessageCircle size={16} />
-                              Reenviar Recibo
+                              Recibo
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteSale(sale.id);
+                              }}
+                              className="flex-1 min-w-[120px] flex items-center justify-center gap-2 bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 py-2 rounded-lg text-sm font-bold transition-colors shadow-sm"
+                            >
+                              <Trash2 size={16} />
+                              Excluir
                             </button>
                           </div>
                         </div>
