@@ -28,6 +28,7 @@ export default function Clientes() {
   const [payingSaleId, setPayingSaleId] = useState<string | null>(null);
   const [payingClientId, setPayingClientId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [isAddingPayment, setIsAddingPayment] = useState(true);
 
   useEffect(() => {
     async function loadData() {
@@ -193,19 +194,30 @@ export default function Clientes() {
     }
   };
 
-  const handleRegisterPayment = async (saleId: string, currentAmountPaid: number, remainingValue: number) => {
+  const handleRegisterPayment = async (saleId: string, currentAmountPaid: number, remainingValue: number, totalValue: number) => {
     if (!paymentAmount) return;
     
-    const amountToPay = parsePriceInput(paymentAmount);
-    if (amountToPay <= 0 || amountToPay > remainingValue) {
-      alert('Valor inválido. O valor deve ser maior que zero e menor ou igual ao restante.');
-      return;
+    const amountInput = parsePriceInput(paymentAmount);
+    let newAmountPaid = 0;
+    let newRemainingValue = 0;
+
+    if (isAddingPayment) {
+      if (amountInput <= 0 || amountInput > remainingValue) {
+        alert('Valor inválido. O valor deve ser maior que zero e menor ou igual ao restante.');
+        return;
+      }
+      newAmountPaid = currentAmountPaid + amountInput;
+      newRemainingValue = remainingValue - amountInput;
+    } else {
+      if (amountInput < 0 || amountInput > totalValue) {
+        alert('Valor inválido. O valor pago não pode ser menor que zero nem maior que o total da venda.');
+        return;
+      }
+      newAmountPaid = amountInput;
+      newRemainingValue = totalValue - amountInput;
     }
 
     try {
-      const newAmountPaid = currentAmountPaid + amountToPay;
-      const newRemainingValue = remainingValue - amountToPay;
-
       const updatedSale = await api.updateSale(saleId, {
         amountPaid: newAmountPaid,
         remainingValue: newRemainingValue
@@ -217,6 +229,22 @@ export default function Clientes() {
     } catch (error) {
       console.error('Error registering payment:', error);
       alert('Erro ao registrar pagamento.');
+    }
+  };
+
+  const handleResetPayment = async (saleId: string, totalValue: number) => {
+    if (!confirm('Tem certeza que deseja zerar os pagamentos desta venda? O valor restante voltará a ser o valor total da venda.')) return;
+
+    try {
+      const updatedSale = await api.updateSale(saleId, {
+        amountPaid: 0,
+        remainingValue: totalValue
+      });
+
+      setSales(sales.map(s => s.id === saleId ? { ...s, amountPaid: 0, remainingValue: totalValue } : s));
+    } catch (error) {
+      console.error('Error resetting payment:', error);
+      alert('Erro ao zerar pagamento.');
     }
   };
 
@@ -396,7 +424,7 @@ export default function Clientes() {
                         <span className="text-lg font-bold text-slate-800">{formatCurrency(clientSales.reduce((acc, s) => acc + s.totalValue, 0))}</span>
                       </div>
                       <div className="bg-white p-3 rounded-xl border border-slate-100 flex flex-col">
-                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Devendo</span>
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Devido</span>
                         <span className={`text-lg font-bold ${openBalance > 0 ? 'text-orange-500' : 'text-emerald-500'}`}>{formatCurrency(openBalance)}</span>
                       </div>
                     </div>
@@ -442,9 +470,26 @@ export default function Clientes() {
                                 )}
                               </div>
                               
-                              {sale.remainingValue > 0 && (
-                                <div className="mt-2 pt-2 border-t border-slate-100">
-                                  {payingSaleId === sale.id ? (
+                              <div className="mt-2 pt-2 border-t border-slate-100 flex flex-col gap-2">
+                                {sale.amountPaid > 0 && (
+                                  <div className="bg-emerald-50 p-2 rounded-lg border border-emerald-100 flex justify-between items-center">
+                                    <div>
+                                      <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Pagamento Registrado</p>
+                                      <p className="text-sm font-bold text-emerald-700">{formatCurrency(sale.amountPaid)}</p>
+                                    </div>
+                                    <button 
+                                      onClick={() => handleResetPayment(sale.id, sale.totalValue)}
+                                      className="flex items-center gap-1 bg-red-100 text-red-600 px-2 py-1.5 rounded-md text-xs font-bold hover:bg-red-200 transition-colors"
+                                      title="Excluir pagamento"
+                                    >
+                                      <Trash2 size={14} /> Excluir
+                                    </button>
+                                  </div>
+                                )}
+                                
+                                {payingSaleId === sale.id ? (
+                                  <div className="flex flex-col gap-2">
+                                    <p className="text-xs font-bold text-slate-500">{isAddingPayment ? 'Somar pagamento:' : 'Ajustar valor total pago:'}</p>
                                     <div className="flex gap-2 items-center">
                                       <input 
                                         type="text" 
@@ -454,7 +499,7 @@ export default function Clientes() {
                                         className="flex-1 rounded-lg border border-primary/20 bg-white focus:border-primary focus:ring-1 focus:ring-primary h-9 px-3 outline-none text-sm font-bold text-emerald-600"
                                       />
                                       <button 
-                                        onClick={() => handleRegisterPayment(sale.id, sale.amountPaid, sale.remainingValue)}
+                                        onClick={() => handleRegisterPayment(sale.id, sale.amountPaid, sale.remainingValue, sale.totalValue)}
                                         className="h-9 px-3 bg-emerald-500 text-white rounded-lg text-sm font-bold hover:bg-emerald-600 transition-colors"
                                       >
                                         Salvar
@@ -466,16 +511,26 @@ export default function Clientes() {
                                         X
                                       </button>
                                     </div>
-                                  ) : (
+                                  </div>
+                                ) : (
+                                  <div className="flex gap-2">
+                                    {sale.remainingValue > 0 && (
+                                      <button 
+                                        onClick={() => { setPayingSaleId(sale.id); setPaymentAmount(formatPriceInput(sale.remainingValue.toFixed(2))); setIsAddingPayment(true); }}
+                                        className="flex-1 flex items-center justify-center gap-2 bg-emerald-50 text-emerald-600 border border-emerald-200 text-xs font-bold py-2 rounded-lg hover:bg-emerald-100 transition-colors"
+                                      >
+                                        <CheckCircle size={14} /> Somar Pagamento
+                                      </button>
+                                    )}
                                     <button 
-                                      onClick={() => { setPayingSaleId(sale.id); setPaymentAmount(formatPriceInput(sale.remainingValue.toFixed(2))); }}
-                                      className="w-full flex items-center justify-center gap-2 bg-emerald-50 text-emerald-600 border border-emerald-200 text-xs font-bold py-2 rounded-lg hover:bg-emerald-100 transition-colors"
+                                      onClick={() => { setPayingSaleId(sale.id); setPaymentAmount(formatPriceInput(sale.amountPaid.toFixed(2))); setIsAddingPayment(false); }}
+                                      className="flex-1 flex items-center justify-center gap-2 bg-slate-50 text-slate-600 border border-slate-200 text-xs font-bold py-2 rounded-lg hover:bg-slate-100 transition-colors"
                                     >
-                                      <CheckCircle size={14} /> Registrar Pagamento
+                                      <Edit2 size={14} /> Corrigir Pago
                                     </button>
-                                  )}
-                                </div>
-                              )}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -537,7 +592,7 @@ export default function Clientes() {
                                 }}
                                 className="flex-1 flex items-center justify-center gap-2 bg-emerald-500 text-white text-sm font-bold py-2 px-4 rounded-lg hover:bg-emerald-600 transition-colors shadow-sm"
                               >
-                                <Wallet size={16} /> Quitar Dívida
+                                <Wallet size={16} /> Registrar Pagamento
                               </button>
                               <button 
                                 onClick={(e) => { e.stopPropagation(); handleSendWhatsApp(client, openBalance, clientSales); }}
