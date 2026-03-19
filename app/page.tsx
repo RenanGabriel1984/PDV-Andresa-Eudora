@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Header from '@/components/Header';
-import { Banknote, Star, TrendingUp, TrendingDown, ArrowUp, Wallet, PackageOpen, Plus, Users, Bell } from 'lucide-react';
+import { Banknote, Star, TrendingUp, TrendingDown, ArrowUp, Wallet, PackageOpen, Plus, Users, Bell, CreditCard, Coins } from 'lucide-react';
 import { api, Product, Sale } from '@/lib/api';
 import Link from 'next/link';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
@@ -33,9 +33,10 @@ export default function Dashboard() {
   }, []);
 
   // --- Calculations ---
-  const { totalRevenue, totalPending, bestSellerName, bestSellerCount, last6Months, maxMonthlyRevenue, currentMonthRevenue, growth, topCategories, averageTicket } = useMemo(() => {
+  const { totalRevenue, totalReceived, totalPending, bestSellerName, bestSellerCount, topPaymentMethodName, topPaymentMethodCount, last6Months, maxMonthlyRevenue, currentMonthRevenue, growth, topCategories, averageTicket } = useMemo(() => {
     // 1. Totals
     const totalRevenue = sales.reduce((acc, sale) => acc + sale.totalValue, 0);
+    const totalReceived = sales.reduce((acc, sale) => acc + sale.amountPaid, 0);
     const totalPending = sales.reduce((acc, sale) => acc + sale.remainingValue, 0);
     const averageTicket = sales.length > 0 ? totalRevenue / sales.length : 0;
 
@@ -61,7 +62,17 @@ export default function Dashboard() {
     const bestSellerName = sortedProducts.length > 0 ? sortedProducts[0][0] : 'Nenhum';
     const bestSellerCount = sortedProducts.length > 0 ? sortedProducts[0][1] : 0;
 
-    // 3. Monthly Revenue (Last 6 months)
+    // 3. Top Payment Method
+    const paymentMethods: Record<string, number> = {};
+    sales.forEach(sale => {
+      const method = sale.paymentMethod || 'Outros';
+      paymentMethods[method] = (paymentMethods[method] || 0) + 1;
+    });
+    const sortedMethods = Object.entries(paymentMethods).sort((a, b) => b[1] - a[1]);
+    const topPaymentMethodName = sortedMethods.length > 0 ? sortedMethods[0][0] : 'Nenhum';
+    const topPaymentMethodCount = sortedMethods.length > 0 ? sortedMethods[0][1] : 0;
+
+    // 4. Monthly Revenue (Last 6 months)
     const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
     const currentDate = new Date();
     
@@ -121,7 +132,7 @@ export default function Dashboard() {
         };
       });
 
-    return { totalRevenue, totalPending, bestSellerName, bestSellerCount, last6Months, maxMonthlyRevenue, currentMonthRevenue, growth, topCategories, averageTicket };
+    return { totalRevenue, totalReceived, totalPending, bestSellerName, bestSellerCount, topPaymentMethodName, topPaymentMethodCount, last6Months, maxMonthlyRevenue, currentMonthRevenue, growth, topCategories, averageTicket };
   }, [sales, products]);
 
   if (!mounted) return null; // Prevent hydration mismatch
@@ -185,39 +196,45 @@ export default function Dashboard() {
               </Link>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Receita do Mês */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Total Vendido */}
               <div className="flex flex-col gap-3 rounded-xl p-6 bg-white shadow-sm border border-primary/5">
                 <div className="flex items-center justify-between">
-                  <p className="text-slate-500 text-sm font-medium">Receita do Mês</p>
+                  <p className="text-slate-500 text-sm font-medium">Total Vendido</p>
                   <Banknote className="text-primary" size={20} />
                 </div>
-                <p className="text-3xl font-extrabold leading-tight text-gold">{formatCurrency(currentMonthRevenue)}</p>
-                <div className="flex items-center justify-between mt-1">
-                  <div className="flex items-center gap-1">
-                    {growth >= 0 ? (
-                      <TrendingUp className="text-emerald-500" size={16} />
-                    ) : (
-                      <TrendingDown className="text-red-500" size={16} />
-                    )}
-                    <p className={`text-sm font-bold ${growth >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                      {growth >= 0 ? '+' : ''}{growth.toFixed(1)}% <span className="text-slate-400 font-normal">vs mês</span>
-                    </p>
-                  </div>
-                  <p className="text-xs text-slate-400 font-medium" title="Faturamento Total">Total: {formatCurrency(totalRevenue)}</p>
+                <p className="text-3xl font-extrabold leading-tight text-slate-800">{formatCurrency(totalRevenue)}</p>
+                <div className="flex items-center gap-1 mt-1">
+                  <p className="text-slate-500 text-sm">
+                    Faturamento bruto
+                  </p>
+                </div>
+              </div>
+
+              {/* Total Recebido */}
+              <div className="flex flex-col gap-3 rounded-xl p-6 bg-white shadow-sm border border-primary/5">
+                <div className="flex items-center justify-between">
+                  <p className="text-slate-500 text-sm font-medium">Total Recebido</p>
+                  <Coins className="text-emerald-500" size={20} />
+                </div>
+                <p className="text-3xl font-extrabold leading-tight text-emerald-600">{formatCurrency(totalReceived)}</p>
+                <div className="flex items-center gap-1 mt-1">
+                  <p className="text-slate-500 text-sm">
+                    Valor já em caixa
+                  </p>
                 </div>
               </div>
 
               {/* Valores a Receber (Fiado) */}
               <div className={`flex flex-col gap-3 rounded-xl p-6 text-white shadow-lg transition-colors ${isPendingHigh ? 'bg-orange-500 shadow-orange-500/40' : 'bg-primary shadow-primary/40'}`}>
                 <div className="flex items-center justify-between">
-                  <p className="text-white/90 text-sm font-medium">Valores a Receber</p>
+                  <p className="text-white/90 text-sm font-medium">A Receber (Fiado)</p>
                   <Wallet size={20} />
                 </div>
                 <p className="text-3xl font-extrabold leading-tight">{formatCurrency(totalPending)}</p>
                 <div className="flex items-center gap-1 mt-1">
                   <p className="text-white text-sm font-bold">
-                    {pendingPercentage}% <span className="text-white/80 font-normal">do faturamento total</span>
+                    {pendingPercentage}% <span className="text-white/80 font-normal">do faturamento</span>
                   </p>
                 </div>
               </div>
@@ -226,7 +243,7 @@ export default function Dashboard() {
               <div className="flex flex-col gap-3 rounded-xl p-6 bg-white shadow-sm border border-primary/5">
                 <div className="flex items-center justify-between">
                   <p className="text-slate-500 text-sm font-medium">Ticket Médio</p>
-                  <Banknote className="text-primary" size={20} />
+                  <TrendingUp className="text-blue-500" size={20} />
                 </div>
                 <p className="text-3xl font-extrabold leading-tight text-slate-800">{formatCurrency(averageTicket)}</p>
                 <div className="flex items-center gap-1 mt-1">
@@ -298,30 +315,21 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Categorias em Destaque */}
-              <div className="rounded-xl bg-white p-6 shadow-sm border border-primary/5">
-                <h3 className="text-lg font-bold mb-4">Categorias em Destaque</h3>
-                
-                {topCategories.length === 0 ? (
-                  <p className="text-sm text-slate-500 italic">Nenhuma venda registrada ainda para calcular categorias.</p>
-                ) : (
-                  <div className="space-y-4">
-                    {topCategories.map((cat) => (
-                      <div key={cat.name} className="space-y-2">
-                        <div className="flex justify-between text-sm font-medium">
-                          <span>{cat.name}</span>
-                          <span>{formatCurrency(cat.value)}</span>
-                        </div>
-                        <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                          <div 
-                            className={`${cat.color} h-full rounded-full transition-all duration-1000`} 
-                            style={{ width: `${cat.percent}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    ))}
+              {/* Modalidade Mais Utilizada */}
+              <div className="rounded-xl bg-white p-6 shadow-sm border border-primary/5 flex flex-col">
+                <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                  <CreditCard className="text-primary" size={20} />
+                  Modalidade Mais Utilizada
+                </h3>
+                <div className="flex flex-col items-center justify-center p-6 bg-slate-50 rounded-xl border border-slate-100 flex-1">
+                  <p className="text-2xl font-extrabold text-center text-slate-800 capitalize">{topPaymentMethodName}</p>
+                  <div className="flex items-center gap-2 mt-3">
+                    <TrendingUp className="text-primary/60" size={16} />
+                    <p className="text-slate-600 text-sm font-bold">
+                      {topPaymentMethodCount} <span className="text-slate-400 font-normal">vendas registradas</span>
+                    </p>
                   </div>
-                )}
+                </div>
               </div>
             </div>
           </>
