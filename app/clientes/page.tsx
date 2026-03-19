@@ -17,8 +17,12 @@ import {
   CheckCircle,
   Wallet,
   MessageCircle,
+  Download,
 } from "lucide-react";
 import { api, Client, Sale, Product } from "@/lib/api";
+
+import { getStoreSettings } from "@/app/configuracoes/page";
+import { exportToExcel, exportToPDF } from "@/lib/export";
 
 export default function Clientes() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -166,7 +170,13 @@ export default function Clientes() {
         currency: "BRL",
       });
 
+    const settings = getStoreSettings();
+
     let message = `Olá, *${client.name}*! Tudo bem?\n\n`;
+    if (settings.storeName) {
+      message = `Olá, *${client.name}*! Aqui é da *${settings.storeName}*, tudo bem?\n\n`;
+    }
+
     message += `Passando para lembrar que você tem um saldo em aberto no valor total de *${formatCurrency(openBalance)}*.\n\n`;
 
     if (unpaidSales.length > 0) {
@@ -184,7 +194,11 @@ export default function Clientes() {
       });
     }
 
-    message += `\nPara facilitar, nossa chave PIX é: *[SUA CHAVE PIX AQUI]*\n`;
+    if (settings.pixKey) {
+      message += `\nPara facilitar, nossa chave PIX é: *${settings.pixKey}*\n`;
+    } else {
+      message += `\nPara facilitar, nossa chave PIX é: *[SUA CHAVE PIX AQUI]*\n`;
+    }
     message += `\nQualquer dúvida ou se já tiver efetuado o pagamento, por favor, me avise. Estou à disposição!`;
 
     const url = `https://wa.me/55${phone}?text=${encodeURIComponent(message)}`;
@@ -403,6 +417,36 @@ export default function Clientes() {
     [clients, searchQuery, showOnlyDebtors, getClientOpenBalance],
   );
 
+  const handleExportExcel = () => {
+    const data = filteredClients.map((client) => {
+      return {
+        Nome: client.name,
+        Telefone: client.phone,
+        Endereço: client.address || "",
+        "Saldo Devedor": getClientOpenBalance(client.id),
+      };
+    });
+    exportToExcel(data, showOnlyDebtors ? "clientes_devedores" : "clientes");
+  };
+
+  const handleExportPDF = () => {
+    const columns = ["Nome", "Telefone", "Endereço", "Saldo Devedor"];
+    const data = filteredClients.map((client) => {
+      return [
+        client.name,
+        client.phone,
+        client.address || "",
+        formatCurrency(getClientOpenBalance(client.id)),
+      ];
+    });
+    exportToPDF(
+      showOnlyDebtors ? "Relatório de Clientes Devedores" : "Relatório de Clientes",
+      columns,
+      data,
+      showOnlyDebtors ? "clientes_devedores" : "clientes"
+    );
+  };
+
   return (
     <div className="min-h-screen bg-background-light">
       <Header showBack bgColor="bg-[#4a154b]" textColor="text-white" />
@@ -439,7 +483,7 @@ export default function Clientes() {
               className="w-full h-14 pl-12 pr-4 rounded-xl border border-primary/10 bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none shadow-sm"
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => setShowOnlyDebtors(!showOnlyDebtors)}
               className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors border ${
@@ -451,6 +495,18 @@ export default function Clientes() {
               {showOnlyDebtors
                 ? "Mostrando apenas devedores"
                 : "Mostrar apenas devedores"}
+            </button>
+            <button
+              onClick={handleExportExcel}
+              className="flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-200 hover:bg-emerald-100 transition-colors"
+            >
+              <Download size={16} /> Excel
+            </button>
+            <button
+              onClick={handleExportPDF}
+              className="flex items-center gap-1 text-xs font-bold text-red-600 bg-red-50 px-3 py-2 rounded-lg border border-red-200 hover:bg-red-100 transition-colors"
+            >
+              <Download size={16} /> PDF
             </button>
           </div>
         </div>
