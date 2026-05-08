@@ -16,8 +16,10 @@ import {
   CreditCard,
   Coins,
   AlertCircle,
+  Download,
 } from "lucide-react";
 import { api, Product, Sale } from "@/lib/api";
+import { exportToPDF } from "@/lib/export";
 import Link from "next/link";
 import {
   BarChart,
@@ -35,6 +37,7 @@ export default function Dashboard() {
   const [sales, setSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month' | 'last_month'>('all');
 
   useEffect(() => {
     setMounted(true);
@@ -55,6 +58,36 @@ export default function Dashboard() {
     loadData();
   }, []);
 
+  const filteredSales = useMemo(() => {
+    if (dateFilter === 'all') return sales;
+    
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    return sales.filter(sale => {
+      const saleDate = new Date(sale.date);
+      
+      if (dateFilter === 'today') {
+        return saleDate >= today;
+      }
+      if (dateFilter === 'week') {
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - today.getDay());
+        return saleDate >= startOfWeek;
+      }
+      if (dateFilter === 'month') {
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        return saleDate >= startOfMonth;
+      }
+      if (dateFilter === 'last_month') {
+        const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+        return saleDate >= startOfLastMonth && saleDate <= endOfLastMonth;
+      }
+      return true;
+    });
+  }, [sales, dateFilter]);
+
   // --- Calculations ---
   const {
     totalRevenue,
@@ -73,13 +106,13 @@ export default function Dashboard() {
     lowStockProducts,
   } = useMemo(() => {
     // 1. Totals
-    const totalRevenue = sales.reduce((acc, sale) => acc + sale.totalValue, 0);
-    const totalReceived = sales.reduce((acc, sale) => acc + sale.amountPaid, 0);
-    const totalPending = sales.reduce(
+    const totalRevenue = filteredSales.reduce((acc, sale) => acc + sale.totalValue, 0);
+    const totalReceived = filteredSales.reduce((acc, sale) => acc + sale.amountPaid, 0);
+    const totalPending = filteredSales.reduce(
       (acc, sale) => acc + sale.remainingValue,
       0,
     );
-    const averageTicket = sales.length > 0 ? totalRevenue / sales.length : 0;
+    const averageTicket = filteredSales.length > 0 ? totalRevenue / filteredSales.length : 0;
 
     const productsById: Record<string, Product> = {};
     const lowStockProducts: Product[] = [];
@@ -92,7 +125,7 @@ export default function Dashboard() {
 
     // 2. Best Seller
     const productSales: Record<string, number> = {};
-    sales.forEach((sale) => {
+    filteredSales.forEach((sale) => {
       if (sale.items) {
         sale.items.forEach((item) => {
           productSales[item.name] =
@@ -114,7 +147,7 @@ export default function Dashboard() {
 
     // 3. Top Payment Method
     const paymentMethods: Record<string, number> = {};
-    sales.forEach((sale) => {
+    filteredSales.forEach((sale) => {
       const method = sale.paymentMethod || "Outros";
       paymentMethods[method] = (paymentMethods[method] || 0) + 1;
     });
@@ -183,7 +216,7 @@ export default function Dashboard() {
 
     // 4. Top Categories
     const categoryRevenue: Record<string, number> = {};
-    sales.forEach((sale) => {
+    filteredSales.forEach((sale) => {
       if (sale.items) {
         sale.items.forEach((item) => {
           const p = productsById[item.productId];
@@ -227,7 +260,7 @@ export default function Dashboard() {
       averageTicket,
       lowStockProducts,
     };
-  }, [sales, products]);
+  }, [sales, filteredSales, products]);
 
   if (!mounted) return null; // Prevent hydration mismatch
 
@@ -240,6 +273,19 @@ export default function Dashboard() {
   const pendingPercentage =
     totalRevenue > 0 ? ((totalPending / totalRevenue) * 100).toFixed(1) : "0.0";
   const isPendingHigh = Number(pendingPercentage) > 30;
+
+  const handleExportPDF = () => {
+    const columns = ["Métrica", "Valor"];
+    const data = [
+      ["Total Vendido", formatCurrency(totalRevenue)],
+      ["Total Recebido", formatCurrency(totalReceived)],
+      ["A Receber (Fiado)", formatCurrency(totalPending)],
+      ["Ticket Médio", formatCurrency(averageTicket)],
+      ["Produto Mais Vendido", `${bestSellerName} (${bestSellerCount}x)`],
+      ["Método Mais Usado", `${topPaymentMethodName} (${topPaymentMethodCount}x)`],
+    ];
+    exportToPDF(`Fechamento - ${dateFilter}`, columns, data, `fechamento_${dateFilter}`);
+  };
 
   return (
     <div className="min-h-screen bg-background-light">
@@ -279,6 +325,68 @@ export default function Dashboard() {
           </div>
         ) : (
           <>
+            {/* Date Filter */}
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="flex overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 gap-2 hide-scrollbar flex-1">
+                <button
+                  onClick={() => setDateFilter("all")}
+                  className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-bold transition-colors ${
+                    dateFilter === "all"
+                      ? "bg-primary text-white shadow-md shadow-primary/20"
+                      : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  Tudo
+                </button>
+                <button
+                  onClick={() => setDateFilter("today")}
+                  className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-bold transition-colors ${
+                    dateFilter === "today"
+                      ? "bg-primary text-white shadow-md shadow-primary/20"
+                      : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  Hoje
+                </button>
+                <button
+                  onClick={() => setDateFilter("week")}
+                  className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-bold transition-colors ${
+                    dateFilter === "week"
+                      ? "bg-primary text-white shadow-md shadow-primary/20"
+                      : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  Esta Semana
+                </button>
+                <button
+                  onClick={() => setDateFilter("month")}
+                  className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-bold transition-colors ${
+                    dateFilter === "month"
+                      ? "bg-primary text-white shadow-md shadow-primary/20"
+                      : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  Este Mês
+                </button>
+                <button
+                  onClick={() => setDateFilter("last_month")}
+                  className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-bold transition-colors ${
+                    dateFilter === "last_month"
+                      ? "bg-primary text-white shadow-md shadow-primary/20"
+                      : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  Mês Passado
+                </button>
+              </div>
+              <button
+                onClick={handleExportPDF}
+                className="flex items-center gap-1 text-xs font-bold text-primary bg-primary/10 px-3 py-2 rounded-lg hover:bg-primary/20 transition-colors shrink-0 self-start"
+              >
+                <Download size={16} /> Exportar
+              </button>
+            </div>
+
             {/* Quick Actions */}
             <div className="grid grid-cols-3 gap-3">
               <Link

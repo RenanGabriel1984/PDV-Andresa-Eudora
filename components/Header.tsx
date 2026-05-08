@@ -2,6 +2,8 @@ import Image from 'next/image';
 import { ArrowLeft, Bell, Search, Menu, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import { useState, useEffect } from 'react';
+import { getStoreSettings } from '@/lib/storeSettings';
 
 interface HeaderProps {
   title?: string;
@@ -24,6 +26,17 @@ export default function Header({
   bgColor = 'bg-background-light/80',
   textColor = 'text-slate-900',
 }: HeaderProps) {
+  const [storeName, setStoreName] = useState('Minha Loja');
+  const [logoUrl, setLogoUrl] = useState('');
+
+  useEffect(() => {
+    const settings = getStoreSettings();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (settings.storeName) setStoreName(settings.storeName);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (settings.logoUrl) setLogoUrl(settings.logoUrl);
+  }, []);
+
   const handleLogout = async () => {
     try {
       await supabase.auth.signOut();
@@ -57,11 +70,17 @@ export default function Header({
         
         <div className="flex-1 flex justify-center">
           <div className="flex flex-col items-center">
-            <div className="h-10 w-10 bg-primary rounded-full flex items-center justify-center text-white font-serif font-bold text-xl shadow-sm border border-gold/30">
-              E
-            </div>
-            <span className="text-gold font-serif text-sm font-semibold mt-1 tracking-wide">
-              Andresa Eudora
+            {logoUrl ? (
+              <div className="h-10 w-10 rounded-full overflow-hidden shadow-sm border border-gold/30 relative">
+                <Image src={logoUrl} alt={storeName} fill className="object-cover" />
+              </div>
+            ) : (
+              <div className="h-10 w-10 bg-primary rounded-full flex items-center justify-center text-white font-serif font-bold text-xl shadow-sm border border-gold/30">
+                {storeName.charAt(0).toUpperCase()}
+              </div>
+            )}
+            <span className="text-gold font-serif text-sm font-semibold mt-1 tracking-wide text-center line-clamp-1">
+              {storeName}
             </span>
           </div>
         </div>
