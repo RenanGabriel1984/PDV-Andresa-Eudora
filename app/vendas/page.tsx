@@ -30,7 +30,7 @@ interface CartItem {
   quantity: number;
 }
 
-import { getStoreSettings } from "@/lib/storeSettings";
+import { getStoreSettings } from "@/app/configuracoes/page";
 import { exportToExcel, exportToPDF } from "@/lib/export";
 
 export default function Vendas() {

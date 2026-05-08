@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { api, Client, Sale, Product } from "@/lib/api";
 
-import { getStoreSettings } from "@/lib/storeSettings";
+import { getStoreSettings } from "@/app/configuracoes/page";
 import { exportToExcel, exportToPDF } from "@/lib/export";
 
 export default function Clientes() {
@@ -48,6 +48,7 @@ export default function Clientes() {
   const [payingSaleId, setPayingSaleId] = useState<string | null>(null);
   const [payingClientId, setPayingClientId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
+  const [isAddingPayment, setIsAddingPayment] = useState(true);
 
   useEffect(() => {
     async function loadData() {
@@ -239,18 +240,14 @@ export default function Clientes() {
         const newAmountPaid = sale.amountPaid + paymentForThisSale;
         const newRemainingValue = sale.remainingValue - paymentForThisSale;
 
-        const paymentRecord = await api.addPayment(sale.id, {
-          amount: paymentForThisSale,
-          paymentDate: new Date().toISOString(),
-          paymentMethod: 'Pix' // Generic fallback, could add UI for this later
-        }, newAmountPaid, newRemainingValue);
+        const updatedSale = await api.updateSale(sale.id, {
+          amountPaid: newAmountPaid,
+          remainingValue: newRemainingValue,
+        });
 
-        const index = updatedSales.findIndex((s) => s.id === sale.id);
+        const index = updatedSales.findIndex((s) => s.id === updatedSale.id);
         if (index !== -1) {
-          const currentSale = updatedSales[index];
-          currentSale.amountPaid = newAmountPaid;
-          currentSale.remainingValue = newRemainingValue;
-          currentSale.payments = [...(currentSale.payments || []), paymentRecord];
+          updatedSales[index] = { ...updatedSale, items: sale.items };
         }
 
         remainingPayment -= paymentForThisSale;
@@ -275,35 +272,45 @@ export default function Clientes() {
     if (!paymentAmount) return;
 
     const amountInput = parsePriceInput(paymentAmount);
+    let newAmountPaid = 0;
+    let newRemainingValue = 0;
 
-    if (amountInput <= 0 || amountInput > remainingValue) {
-      alert(
-        "Valor inválido. O valor deve ser maior que zero e menor ou igual ao restante.",
-      );
-      return;
+    if (isAddingPayment) {
+      if (amountInput <= 0 || amountInput > remainingValue) {
+        alert(
+          "Valor inválido. O valor deve ser maior que zero e menor ou igual ao restante.",
+        );
+        return;
+      }
+      newAmountPaid = currentAmountPaid + amountInput;
+      newRemainingValue = remainingValue - amountInput;
+    } else {
+      if (amountInput < 0 || amountInput > totalValue) {
+        alert(
+          "Valor inválido. O valor pago não pode ser menor que zero nem maior que o total da venda.",
+        );
+        return;
+      }
+      newAmountPaid = amountInput;
+      newRemainingValue = totalValue - amountInput;
     }
-    const newAmountPaid = currentAmountPaid + amountInput;
-    const newRemainingValue = remainingValue - amountInput;
 
     try {
-      const paymentRecord = await api.addPayment(saleId, {
-        amount: amountInput,
-        paymentDate: new Date().toISOString(),
-        paymentMethod: 'Pix' // Generic fallback, could add UI for this later
-      }, newAmountPaid, newRemainingValue);
+      const updatedSale = await api.updateSale(saleId, {
+        amountPaid: newAmountPaid,
+        remainingValue: newRemainingValue,
+      });
 
       setSales(
-        sales.map((s) => {
-          if (s.id === saleId) {
-            return {
-              ...s,
-              amountPaid: newAmountPaid,
-              remainingValue: newRemainingValue,
-              payments: [...(s.payments || []), paymentRecord]
-            };
-          }
-          return s;
-        }),
+        sales.map((s) =>
+          s.id === saleId
+            ? {
+                ...s,
+                amountPaid: newAmountPaid,
+                remainingValue: newRemainingValue,
+              }
+            : s,
+        ),
       );
       setPayingSaleId(null);
       setPaymentAmount("");
@@ -750,7 +757,9 @@ export default function Clientes() {
                                 {payingSaleId === sale.id ? (
                                   <div className="flex flex-col gap-2">
                                     <p className="text-xs font-bold text-slate-500">
-                                      Adicionar Pagamento:
+                                      {isAddingPayment
+                                        ? "Somar pagamento:"
+                                        : "Ajustar valor total pago:"}
                                     </p>
                                     <div className="flex gap-2 items-center">
                                       <input
@@ -799,12 +808,28 @@ export default function Clientes() {
                                               sale.remainingValue.toFixed(2),
                                             ),
                                           );
+                                          setIsAddingPayment(true);
                                         }}
                                         className="flex-1 flex items-center justify-center gap-2 bg-emerald-50 text-emerald-600 border border-emerald-200 text-xs font-bold py-2 rounded-lg hover:bg-emerald-100 transition-colors"
                                       >
-                                        <CheckCircle size={14} /> Receber Pagamento
+                                        <CheckCircle size={14} /> Somar
+                                        Pagamento
                                       </button>
                                     )}
+                                    <button
+                                      onClick={() => {
+                                        setPayingSaleId(sale.id);
+                                        setPaymentAmount(
+                                          formatPriceInput(
+                                            sale.amountPaid.toFixed(2),
+                                          ),
+                                        );
+                                        setIsAddingPayment(false);
+                                      }}
+                                      className="flex-1 flex items-center justify-center gap-2 bg-slate-50 text-slate-600 border border-slate-200 text-xs font-bold py-2 rounded-lg hover:bg-slate-100 transition-colors"
+                                    >
+                                      <Edit2 size={14} /> Corrigir Pago
+                                    </button>
                                   </div>
                                 )}
                               </div>

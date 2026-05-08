@@ -23,13 +23,6 @@ export interface SaleItem {
   quantity: number;
 }
 
-export interface Payment {
-  id: string;
-  amount: number;
-  paymentDate: string;
-  paymentMethod: string;
-}
-
 export interface Sale {
   id: string;
   clientId: string;
@@ -39,7 +32,6 @@ export interface Sale {
   paymentMethod: string;
   date: string;
   items?: SaleItem[];
-  payments?: Payment[];
   productId?: string; // For backward compatibility
 }
 
@@ -234,7 +226,7 @@ export const api = {
   async getSales(): Promise<Sale[]> {
     const { data, error } = await supabase
       .from("sales")
-      .select("*, sale_items(*), sale_payments(*)")
+      .select("*, sale_items(*)")
       .order("date", { ascending: false });
     if (error) {
       console.error("Error fetching sales:", error);
@@ -255,19 +247,6 @@ export const api = {
           price: Number(item.price),
           quantity: item.quantity,
         })) || [],
-      payments:
-        s.sale_payments && s.sale_payments.length > 0 ? s.sale_payments?.map((payment: any) => ({
-          id: payment.id,
-          amount: Number(payment.amount),
-          paymentDate: payment.date,
-          paymentMethod: payment.payment_method,
-        }))?.sort((a: any, b: any) => new Date(a.paymentDate).getTime() - new Date(b.paymentDate).getTime()) : 
-        (Number(s.amount_paid) > 0 ? [{
-          id: 'legacy-' + s.id,
-          amount: Number(s.amount_paid),
-          paymentDate: s.date,
-          paymentMethod: s.payment_method,
-        }] : []),
     }));
   },
   async addSale(
@@ -304,22 +283,6 @@ export const api = {
         .from("sale_items")
         .insert(dbItems);
       if (itemsError) throw itemsError;
-
-      // Add initial payment if there is any amount paid
-      if (sale.amountPaid > 0) {
-        const initialPayment = {
-          sale_id: newSale.id,
-          amount: sale.amountPaid,
-          payment_method: sale.paymentMethod,
-          date: sale.date || new Date().toISOString(),
-        };
-        const { error: paymentError } = await supabase
-          .from("sale_payments")
-          .insert([initialPayment]);
-        if (paymentError) {
-          console.warn("Could not insert initial payment into sale_payments:", paymentError);
-        }
-      }
 
       // Deduct stock and add movement
       for (const item of items) {
@@ -514,51 +477,4 @@ export const api = {
       .eq("id", id);
     if (saleError) throw saleError;
   },
-
-  // Payments
-  async addPayment(saleId: string, payment: Omit<Payment, "id">, newAmountPaid: number, newRemainingValue: number): Promise<Payment> {
-    const dbPayment = {
-      sale_id: saleId,
-      amount: payment.amount,
-      payment_method: payment.paymentMethod,
-      date: payment.paymentDate,
-    };
-    
-    // Attempt to insert into sale_payments (will fail cleanly and log if table doesn't exist)
-    let paymentData = null;
-    const { data, error } = await supabase
-      .from("sale_payments")
-      .insert([dbPayment])
-      .select()
-      .single();
-      
-    if (error) {
-      console.warn("Could not insert into sale_payments (table might not exist), updating sales table only: ", error);
-    } else {
-      paymentData = data;
-    }
-
-    // Update sale amounts and remaining value
-    const { error: saleError } = await supabase
-      .from("sales")
-      .update({
-        amount_paid: newAmountPaid,
-        remaining_value: newRemainingValue
-      })
-      .eq("id", saleId);
-      
-    if (saleError) throw saleError;
-    
-    return paymentData ? {
-      id: paymentData.id,
-      amount: Number(paymentData.amount),
-      paymentDate: paymentData.date,
-      paymentMethod: paymentData.payment_method
-    } : {
-      id: crypto.randomUUID(),
-      amount: payment.amount,
-      paymentDate: payment.paymentDate,
-      paymentMethod: payment.paymentMethod
-    };
-  }
 };
