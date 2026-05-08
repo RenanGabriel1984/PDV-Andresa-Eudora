@@ -30,7 +30,7 @@ interface CartItem {
   quantity: number;
 }
 
-import { getStoreSettings } from "@/app/configuracoes/page";
+import { getStoreSettings } from "@/lib/storeSettings";
 import { exportToExcel, exportToPDF } from "@/lib/export";
 
 export default function Vendas() {
@@ -293,6 +293,18 @@ export default function Vendas() {
       0;
     const remaining = totalValue - paid;
 
+    let defaultPayments: any[] = [];
+    if (paid > 0) {
+      defaultPayments = [{
+         id: Math.random().toString(36).substring(2, 9),
+         amount: paid,
+         paymentDate: new Date().toISOString(),
+         paymentMethod: paymentMethod,
+         createdAt: new Date().toISOString(),
+         notes: "Pagamento inicial da venda"
+      }];
+    }
+
     try {
       const saleItems = cart.map((item) => ({
         productId: item.product.id,
@@ -302,6 +314,18 @@ export default function Vendas() {
       }));
 
       if (editingSaleId) {
+        // Find existing to preserve payments if editing
+        const existingSale = sales.find(s => s.id === editingSaleId);
+        let updatedPayments = existingSale?.payments || [];
+        
+        // If it had no payments previously but now we establish a new setup:
+        // Actually, for editing, we might just overwrite or append? The user says "Nunca sobrescrever histórico anterior".
+        // To be safe in edit, we just pass the existing payments + adjusting the first one if we want, or just let it exist.
+        // If existingSale doesn't have payments historically, we can initialize it.
+        if (updatedPayments.length === 0 && paid > 0) {
+           updatedPayments = defaultPayments;
+        }
+
         const updatedSale = await api.updateSaleWithItems(
           editingSaleId,
           {
@@ -310,6 +334,7 @@ export default function Vendas() {
             amountPaid: paid,
             remainingValue: remaining,
             paymentMethod,
+            payments: updatedPayments,
           },
           saleItems,
         );
@@ -326,6 +351,7 @@ export default function Vendas() {
             remainingValue: remaining,
             paymentMethod,
             date: new Date().toISOString(),
+            payments: defaultPayments,
           },
           saleItems,
         );

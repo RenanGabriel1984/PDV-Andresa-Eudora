@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { api, Client, Sale, Product } from "@/lib/api";
 
-import { getStoreSettings } from "@/app/configuracoes/page";
+import { getStoreSettings } from "@/lib/storeSettings";
 import { exportToExcel, exportToPDF } from "@/lib/export";
 
 export default function Clientes() {
@@ -177,7 +177,7 @@ export default function Clientes() {
       message = `Olá, *${client.name}*! Aqui é da *${settings.storeName}*, tudo bem?\n\n`;
     }
 
-    message += `Passando para lembrar que você tem um saldo em aberto no valor total de *${formatCurrency(openBalance)}*.\n\n`;
+    message += `Passando para verificar sobre o seu saldo em aberto conosco. O valor pendente atual é de *${formatCurrency(openBalance)}*.\n\n`;
 
     if (unpaidSales.length > 0) {
       message += `*Detalhes das compras em aberto:*\n`;
@@ -190,7 +190,17 @@ export default function Clientes() {
         } else {
           message += `  - ${getProductName(sale.productId || "")}\n`;
         }
-        message += `  *Valor Restante: ${formatCurrency(sale.remainingValue)}*\n`;
+        
+        message += `  Valor Original: ${formatCurrency(sale.totalValue)}\n`;
+        
+        if (sale.payments && sale.payments.length > 0) {
+           message += `  *Pagamentos parciais:*\n`;
+           sale.payments.forEach(payment => {
+             message += `    - ${new Date(payment.paymentDate).toLocaleDateString("pt-BR")}: ${formatCurrency(payment.amount)}\n`;
+           });
+        }
+        
+        message += `  *Saldo Pendente desta Venda: ${formatCurrency(sale.remainingValue)}*\n`;
       });
     }
 
@@ -240,14 +250,24 @@ export default function Clientes() {
         const newAmountPaid = sale.amountPaid + paymentForThisSale;
         const newRemainingValue = sale.remainingValue - paymentForThisSale;
 
+        const newPayment = {
+          id: Math.random().toString(36).substring(2, 9),
+          amount: paymentForThisSale,
+          paymentDate: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          notes: "Abatimento geral",
+        };
+        const finalPayments = [...(sale.payments || []), newPayment];
+
         const updatedSale = await api.updateSale(sale.id, {
           amountPaid: newAmountPaid,
           remainingValue: newRemainingValue,
+          payments: finalPayments,
         });
 
         const index = updatedSales.findIndex((s) => s.id === updatedSale.id);
         if (index !== -1) {
-          updatedSales[index] = { ...updatedSale, items: sale.items };
+          updatedSales[index] = { ...updatedSale, items: sale.items, payments: updatedSale.payments };
         }
 
         remainingPayment -= paymentForThisSale;
@@ -274,6 +294,7 @@ export default function Clientes() {
     const amountInput = parsePriceInput(paymentAmount);
     let newAmountPaid = 0;
     let newRemainingValue = 0;
+    let diff = 0;
 
     if (isAddingPayment) {
       if (amountInput <= 0 || amountInput > remainingValue) {
@@ -284,6 +305,7 @@ export default function Clientes() {
       }
       newAmountPaid = currentAmountPaid + amountInput;
       newRemainingValue = remainingValue - amountInput;
+      diff = amountInput;
     } else {
       if (amountInput < 0 || amountInput > totalValue) {
         alert(
@@ -293,12 +315,26 @@ export default function Clientes() {
       }
       newAmountPaid = amountInput;
       newRemainingValue = totalValue - amountInput;
+      diff = newAmountPaid - currentAmountPaid;
     }
 
     try {
+      const currentSale = sales.find(s => s.id === saleId);
+      let finalPayments = currentSale?.payments || [];
+      if (diff !== 0) {
+        finalPayments = [...finalPayments, {
+          id: Math.random().toString(36).substring(2, 9),
+          amount: diff,
+          paymentDate: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          notes: isAddingPayment ? "Pagamento adicional" : "Ajuste manual de saldo",
+        }];
+      }
+
       const updatedSale = await api.updateSale(saleId, {
         amountPaid: newAmountPaid,
         remainingValue: newRemainingValue,
+        payments: finalPayments,
       });
 
       setSales(
@@ -308,6 +344,7 @@ export default function Clientes() {
                 ...s,
                 amountPaid: newAmountPaid,
                 remainingValue: newRemainingValue,
+                payments: finalPayments,
               }
             : s,
         ),
@@ -332,12 +369,13 @@ export default function Clientes() {
       const updatedSale = await api.updateSale(saleId, {
         amountPaid: 0,
         remainingValue: totalValue,
+        payments: [],
       });
 
       setSales(
         sales.map((s) =>
           s.id === saleId
-            ? { ...s, amountPaid: 0, remainingValue: totalValue }
+            ? { ...s, amountPaid: 0, remainingValue: totalValue, payments: [] }
             : s,
         ),
       );
@@ -730,27 +768,48 @@ export default function Clientes() {
 
                               <div className="mt-2 pt-2 border-t border-slate-100 flex flex-col gap-2">
                                 {sale.amountPaid > 0 && (
-                                  <div className="bg-emerald-50 p-2 rounded-lg border border-emerald-100 flex justify-between items-center">
-                                    <div>
-                                      <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">
-                                        Pagamento Registrado
-                                      </p>
-                                      <p className="text-sm font-bold text-emerald-700">
-                                        {formatCurrency(sale.amountPaid)}
-                                      </p>
+                                  <div className="bg-emerald-50 p-2 rounded-lg border border-emerald-100 flex flex-col gap-2">
+                                    <div className="flex justify-between items-center">
+                                      <div>
+                                        <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">
+                                          Total Pago (Até o Momento)
+                                        </p>
+                                        <p className="text-sm font-bold text-emerald-700">
+                                          {formatCurrency(sale.amountPaid)}
+                                        </p>
+                                      </div>
+                                      <button
+                                        onClick={() =>
+                                          handleResetPayment(
+                                            sale.id,
+                                            sale.totalValue,
+                                          )
+                                        }
+                                        className="flex items-center gap-1 bg-red-100 text-red-600 px-2 py-1.5 rounded-md text-xs font-bold hover:bg-red-200 transition-colors"
+                                        title="Zerar todos os pagamentos"
+                                      >
+                                        <Trash2 size={14} /> Zerar Pagamentos
+                                      </button>
                                     </div>
-                                    <button
-                                      onClick={() =>
-                                        handleResetPayment(
-                                          sale.id,
-                                          sale.totalValue,
-                                        )
-                                      }
-                                      className="flex items-center gap-1 bg-red-100 text-red-600 px-2 py-1.5 rounded-md text-xs font-bold hover:bg-red-200 transition-colors"
-                                      title="Excluir pagamento"
-                                    >
-                                      <Trash2 size={14} /> Excluir
-                                    </button>
+                                    
+                                    {sale.payments && sale.payments.length > 0 && (
+                                      <div className="mt-2 space-y-1">
+                                        <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider border-b border-emerald-200 pb-1 mb-2">
+                                          Histórico de Pagamentos
+                                        </p>
+                                        {sale.payments.map((payment) => (
+                                          <div key={payment.id} className="flex justify-between items-center text-xs">
+                                            <span className="text-emerald-700 font-medium">
+                                              {new Date(payment.paymentDate).toLocaleDateString("pt-BR")}
+                                              {payment.notes && <span className="text-emerald-500 ml-1">({payment.notes})</span>}
+                                            </span>
+                                            <span className="font-bold text-emerald-800">
+                                              +{formatCurrency(payment.amount)}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
                                   </div>
                                 )}
 

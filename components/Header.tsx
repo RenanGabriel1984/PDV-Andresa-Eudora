@@ -3,7 +3,7 @@ import { ArrowLeft, Bell, Search, Menu, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useState, useEffect } from 'react';
-import { getStoreSettings } from '@/app/configuracoes/page';
+import { getStoreSettings } from '@/lib/storeSettings';
 
 interface HeaderProps {
   title?: string;

@@ -23,6 +23,15 @@ export interface SaleItem {
   quantity: number;
 }
 
+export interface Payment {
+  id: string;
+  amount: number;
+  paymentDate: string;
+  paymentMethod?: string;
+  createdAt?: string;
+  notes?: string;
+}
+
 export interface Sale {
   id: string;
   clientId: string;
@@ -33,6 +42,10 @@ export interface Sale {
   date: string;
   items?: SaleItem[];
   productId?: string; // For backward compatibility
+  // Optional extension fields
+  paidAmount?: number;
+  remainingAmount?: number;
+  payments?: Payment[];
 }
 
 export interface StockMovement {
@@ -240,6 +253,10 @@ export const api = {
       remainingValue: Number(s.remaining_value),
       paymentMethod: s.payment_method,
       date: s.date,
+      // Optional extension fields
+      paidAmount: Number(s.amount_paid),
+      remainingAmount: Number(s.remaining_value),
+      payments: s.payments || [],
       items:
         s.sale_items?.map((item: any) => ({
           productId: item.product_id,
@@ -254,20 +271,38 @@ export const api = {
     items: SaleItem[],
   ): Promise<Sale> {
     // Insert sale
-    const dbSale = {
+    const dbSale: any = {
       client_id: sale.clientId,
       total_value: sale.totalValue,
-      amount_paid: sale.amountPaid,
-      remaining_value: sale.remainingValue,
+      amount_paid: sale.amountPaid !== undefined ? sale.amountPaid : (sale.paidAmount || 0),
+      remaining_value: sale.remainingValue !== undefined ? sale.remainingValue : (sale.remainingAmount || 0),
       payment_method: sale.paymentMethod,
       date: sale.date || new Date().toISOString(),
     };
 
-    const { data: newSale, error: saleError } = await supabase
+    if (sale.payments) {
+       dbSale.payments = sale.payments;
+    }
+
+    let { data: newSale, error: saleError } = await supabase
       .from("sales")
       .insert([dbSale])
       .select()
       .single();
+
+    // Fallback if payments column doesn't exist
+    if (saleError && saleError.code === '42703' && dbSale.payments) {
+       console.warn("Column 'payments' not found in Supabase. Falling back to simple numeric update.");
+       delete dbSale.payments;
+       const fallbackResult = await supabase
+         .from("sales")
+         .insert([dbSale])
+         .select()
+         .single();
+       newSale = fallbackResult.data;
+       saleError = fallbackResult.error;
+    }
+
     if (saleError) throw saleError;
 
     // Insert items
@@ -325,19 +360,46 @@ export const api = {
     const dbSale: any = {};
     if (updates.amountPaid !== undefined)
       dbSale.amount_paid = updates.amountPaid;
+    if (updates.paidAmount !== undefined && dbSale.amount_paid === undefined)
+      dbSale.amount_paid = updates.paidAmount;
+
     if (updates.remainingValue !== undefined)
       dbSale.remaining_value = updates.remainingValue;
+    if (updates.remainingAmount !== undefined && dbSale.remaining_value === undefined)
+      dbSale.remaining_value = updates.remainingAmount;
+
     if (updates.paymentMethod !== undefined)
       dbSale.payment_method = updates.paymentMethod;
     if (updates.totalValue !== undefined)
       dbSale.total_value = updates.totalValue;
+    
+    if (updates.date !== undefined)
+      dbSale.date = updates.date;
 
-    const { data, error } = await supabase
+    if (updates.payments !== undefined)
+      dbSale.payments = updates.payments;
+
+    let { data, error } = await supabase
       .from("sales")
       .update(dbSale)
       .eq("id", id)
       .select()
       .single();
+
+    // Fallback if payments column doesn't exist
+    if (error && error.code === '42703' && dbSale.payments !== undefined) {
+       console.warn("Column 'payments' not found in Supabase. Falling back to simple numeric update.");
+       delete dbSale.payments;
+       const fallbackResult = await supabase
+         .from("sales")
+         .update(dbSale)
+         .eq("id", id)
+         .select()
+         .single();
+       data = fallbackResult.data;
+       error = fallbackResult.error;
+    }
+
     if (error) throw error;
 
     return {

@@ -1,7 +1,7 @@
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { getStoreSettings } from "@/app/configuracoes/page";
+import { getStoreSettings } from "@/lib/storeSettings";
 
 export const exportToExcel = (
   data: any[],
