@@ -506,7 +506,15 @@ export default function Vendas() {
 
     if (sale.remainingValue > 0) {
       message += `${emojiCheck} Valor Pago: *${formatCurrency(sale.amountPaid)}*\n`;
-      message += `${emojiHourglass} Restante a pagar: *${formatCurrency(sale.remainingValue)}* (para o próximo mês)\n\n`;
+      
+      if (sale.payments && sale.payments.length > 0) {
+         message += `*Histórico de pagamentos:*\n`;
+         sale.payments.forEach(payment => {
+           message += `  - ${new Date(payment.paymentDate).toLocaleDateString("pt-BR")}: ${formatCurrency(payment.amount)}\n`;
+         });
+      }
+      
+      message += `${emojiHourglass} Restante a pagar: *${formatCurrency(sale.remainingValue)}*\n\n`;
     }
 
     message += `Forma de pagamento escolhida: *${sale.paymentMethod}*\n\n`;

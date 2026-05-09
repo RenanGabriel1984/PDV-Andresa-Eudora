@@ -292,7 +292,14 @@ export const api = {
 
     // Fallback if payments column doesn't exist
     const isMissingColumnError = (err: any) => 
-      err && (err.code === '42703' || (err.message && err.message.includes("column 'payments' of relation 'sales' does not exist")) || (err.message && err.message.includes("could not find the 'payments' column")));
+      err && (
+        err.code === '42703' || 
+        (err.message && (
+          err.message.toLowerCase().includes("column") && 
+          err.message.toLowerCase().includes("payments") && 
+          (err.message.toLowerCase().includes("not exist") || err.message.toLowerCase().includes("not find") || err.message.toLowerCase().includes("schema cache"))
+        ))
+      );
 
     if (saleError && isMissingColumnError(saleError) && dbSale.payments) {
        console.warn("Column 'payments' not found in Supabase. Falling back to simple numeric update.");
@@ -391,7 +398,14 @@ export const api = {
 
     // Fallback if payments column doesn't exist
     const isMissingColumnError = (err: any) => 
-      err && (err.code === '42703' || (err.message && err.message.includes("column 'payments' of relation 'sales' does not exist")) || (err.message && err.message.includes("could not find the 'payments' column")));
+      err && (
+        err.code === '42703' || 
+        (err.message && (
+          err.message.toLowerCase().includes("column") && 
+          err.message.toLowerCase().includes("payments") && 
+          (err.message.toLowerCase().includes("not exist") || err.message.toLowerCase().includes("not find") || err.message.toLowerCase().includes("schema cache"))
+        ))
+      );
 
     if (error && isMissingColumnError(error) && dbSale.payments !== undefined) {
        console.warn("Column 'payments' not found in Supabase. Falling back to simple numeric update.");
