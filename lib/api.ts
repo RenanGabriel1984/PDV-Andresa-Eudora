@@ -291,7 +291,10 @@ export const api = {
       .single();
 
     // Fallback if payments column doesn't exist
-    if (saleError && saleError.code === '42703' && dbSale.payments) {
+    const isMissingColumnError = (err: any) => 
+      err && (err.code === '42703' || (err.message && err.message.includes("column 'payments' of relation 'sales' does not exist")) || (err.message && err.message.includes("could not find the 'payments' column")));
+
+    if (saleError && isMissingColumnError(saleError) && dbSale.payments) {
        console.warn("Column 'payments' not found in Supabase. Falling back to simple numeric update.");
        delete dbSale.payments;
        const fallbackResult = await supabase
@@ -387,7 +390,10 @@ export const api = {
       .single();
 
     // Fallback if payments column doesn't exist
-    if (error && error.code === '42703' && dbSale.payments !== undefined) {
+    const isMissingColumnError = (err: any) => 
+      err && (err.code === '42703' || (err.message && err.message.includes("column 'payments' of relation 'sales' does not exist")) || (err.message && err.message.includes("could not find the 'payments' column")));
+
+    if (error && isMissingColumnError(error) && dbSale.payments !== undefined) {
        console.warn("Column 'payments' not found in Supabase. Falling back to simple numeric update.");
        delete dbSale.payments;
        const fallbackResult = await supabase
