@@ -48,6 +48,8 @@ export default function Clientes() {
   const [payingSaleId, setPayingSaleId] = useState<string | null>(null);
   const [payingClientId, setPayingClientId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("Pix");
+  const [paymentNotes, setPaymentNotes] = useState("");
   const [isAddingPayment, setIsAddingPayment] = useState(true);
 
   useEffect(() => {
@@ -272,8 +274,9 @@ export default function Clientes() {
           id: Math.random().toString(36).substring(2, 9),
           amount: paymentForThisSale,
           paymentDate: new Date().toISOString(),
+          paymentMethod: paymentMethod,
           createdAt: new Date().toISOString(),
-          notes: "Abatimento geral",
+          notes: paymentNotes ? "Abatimento geral - " + paymentNotes : "Abatimento geral",
         };
         const finalPayments = [...(sale.payments || []), newPayment];
 
@@ -294,6 +297,8 @@ export default function Clientes() {
       setSales(updatedSales);
       setPayingClientId(null);
       setPaymentAmount("");
+      setPaymentNotes("");
+      setPaymentMethod("Pix");
       alert("Pagamento registrado com sucesso!");
     } catch (error) {
       console.error("Error registering client payment:", error);
@@ -344,8 +349,9 @@ export default function Clientes() {
           id: Math.random().toString(36).substring(2, 9),
           amount: diff,
           paymentDate: new Date().toISOString(),
+          paymentMethod: paymentMethod,
           createdAt: new Date().toISOString(),
-          notes: isAddingPayment ? "Pagamento adicional" : "Ajuste manual de saldo",
+          notes: paymentNotes || (isAddingPayment ? "Pagamento adicional" : "Ajuste manual de saldo"),
         }];
       }
 
@@ -848,10 +854,13 @@ export default function Clientes() {
                                         </p>
                                         {sale.payments.map((payment) => (
                                           <div key={payment.id} className="flex justify-between items-center text-xs">
-                                            <span className="text-emerald-700 font-medium">
-                                              {new Date(payment.paymentDate).toLocaleDateString("pt-BR")}
-                                              {payment.notes && <span className="text-emerald-500 ml-1">({payment.notes})</span>}
-                                            </span>
+                                            <div className="flex flex-col">
+                                              <span className="text-emerald-700 font-medium">
+                                                {new Date(payment.paymentDate).toLocaleDateString("pt-BR")}
+                                                {payment.paymentMethod && <span className="ml-1 text-emerald-800 font-semibold">[{payment.paymentMethod}]</span>}
+                                              </span>
+                                              {payment.notes && <span className="text-emerald-600">Obs: {payment.notes}</span>}
+                                            </div>
                                             <div className="flex items-center gap-2">
                                               <span className="font-bold text-emerald-800">
                                                 +{formatCurrency(payment.amount)}
@@ -890,6 +899,25 @@ export default function Clientes() {
                                         }
                                         className="flex-1 rounded-lg border border-primary/20 bg-white focus:border-primary focus:ring-1 focus:ring-primary h-9 px-3 outline-none text-sm font-bold text-emerald-600"
                                       />
+                                      <select
+                                        value={paymentMethod}
+                                        onChange={(e) => setPaymentMethod(e.target.value)}
+                                        className="w-1/3 rounded-lg border border-primary/20 bg-white focus:border-primary focus:ring-1 focus:ring-primary h-9 px-2 outline-none text-sm text-slate-700"
+                                      >
+                                        <option value="Pix">Pix</option>
+                                        <option value="Dinheiro">Dinheiro</option>
+                                        <option value="Cartão de Crédito">Crédito</option>
+                                        <option value="Cartão de Débito">Débito</option>
+                                      </select>
+                                    </div>
+                                    <div className="flex gap-2 items-center">
+                                      <input
+                                        type="text"
+                                        placeholder="Observações (opcional)"
+                                        value={paymentNotes}
+                                        onChange={(e) => setPaymentNotes(e.target.value)}
+                                        className="flex-1 rounded-lg border border-primary/20 bg-white focus:border-primary focus:ring-1 focus:ring-primary h-9 px-3 outline-none text-sm text-slate-600"
+                                      />
                                       <button
                                         onClick={() =>
                                           handleRegisterPayment(
@@ -907,6 +935,8 @@ export default function Clientes() {
                                         onClick={() => {
                                           setPayingSaleId(null);
                                           setPaymentAmount("");
+                                          setPaymentNotes("");
+                                          setPaymentMethod("Pix");
                                         }}
                                         className="h-9 px-3 bg-slate-200 text-slate-600 rounded-lg text-sm font-bold hover:bg-slate-300 transition-colors"
                                       >
@@ -964,38 +994,61 @@ export default function Clientes() {
                             Registrar Pagamento (Dívida Total:{" "}
                             {formatCurrency(openBalance)})
                           </p>
-                          <div className="flex gap-2 items-center">
-                            <input
-                              type="text"
-                              placeholder="R$ 0,00"
-                              value={paymentAmount}
-                              onChange={(e) =>
-                                setPaymentAmount(
-                                  formatPriceInput(e.target.value),
-                                )
-                              }
-                              className="flex-1 rounded-lg border border-emerald-200 bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 h-10 px-3 outline-none text-sm font-bold text-emerald-700"
-                            />
-                            <button
-                              onClick={() =>
-                                handleRegisterClientPayment(
-                                  client.id,
-                                  openBalance,
-                                )
-                              }
-                              className="h-10 px-4 bg-emerald-500 text-white rounded-lg text-sm font-bold hover:bg-emerald-600 transition-colors"
-                            >
-                              Salvar
-                            </button>
-                            <button
-                              onClick={() => {
-                                setPayingClientId(null);
-                                setPaymentAmount("");
-                              }}
-                              className="h-10 px-4 bg-slate-200 text-slate-600 rounded-lg text-sm font-bold hover:bg-slate-300 transition-colors"
-                            >
-                              Cancelar
-                            </button>
+                          <div className="flex flex-col gap-2">
+                            <div className="flex gap-2 items-center">
+                              <input
+                                type="text"
+                                placeholder="R$ 0,00"
+                                value={paymentAmount}
+                                onChange={(e) =>
+                                  setPaymentAmount(
+                                    formatPriceInput(e.target.value),
+                                  )
+                                }
+                                className="flex-1 rounded-lg border border-emerald-200 bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 h-10 px-3 outline-none text-sm font-bold text-emerald-700"
+                              />
+                              <select
+                                value={paymentMethod}
+                                onChange={(e) => setPaymentMethod(e.target.value)}
+                                className="w-1/3 rounded-lg border border-emerald-200 bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 h-10 px-2 outline-none text-sm text-slate-700"
+                              >
+                                <option value="Pix">Pix</option>
+                                <option value="Dinheiro">Dinheiro</option>
+                                <option value="Cartão de Crédito">Crédito</option>
+                                <option value="Cartão de Débito">Débito</option>
+                              </select>
+                            </div>
+                            <div className="flex gap-2 items-center">
+                              <input
+                                type="text"
+                                placeholder="Observações (opcional)"
+                                value={paymentNotes}
+                                onChange={(e) => setPaymentNotes(e.target.value)}
+                                className="flex-1 rounded-lg border border-emerald-200 bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 h-10 px-3 outline-none text-sm text-slate-600"
+                              />
+                              <button
+                                onClick={() =>
+                                  handleRegisterClientPayment(
+                                    client.id,
+                                    openBalance,
+                                  )
+                                }
+                                className="h-10 px-4 bg-emerald-500 text-white rounded-lg text-sm font-bold hover:bg-emerald-600 transition-colors"
+                              >
+                                Salvar
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setPayingClientId(null);
+                                  setPaymentAmount("");
+                                  setPaymentMethod("Pix");
+                                  setPaymentNotes("");
+                                }}
+                                className="h-10 px-4 bg-slate-200 text-slate-600 rounded-lg text-sm font-bold hover:bg-slate-300 transition-colors"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
                           </div>
                         </div>
                       ) : deletingId === client.id ? (

@@ -67,6 +67,7 @@ export default function Vendas() {
   const [selectedProductIdToAdd, setSelectedProductIdToAdd] = useState("");
 
   const [paymentMethod, setPaymentMethod] = useState("Pix");
+  const [paymentNotes, setPaymentNotes] = useState("");
 
   const [paymentStatus, setPaymentStatus] = useState<'pago' | 'parcial' | 'a_receber'>('pago');
   const [amountPaid, setAmountPaid] = useState("");
@@ -302,7 +303,7 @@ export default function Vendas() {
          paymentDate: new Date().toISOString(),
          paymentMethod: paymentMethod,
          createdAt: new Date().toISOString(),
-         notes: "Pagamento inicial da venda"
+         notes: paymentNotes || "Pagamento inicial da venda"
       }];
     }
 
@@ -391,6 +392,37 @@ export default function Vendas() {
     } catch (error) {
       console.error("Error deleting sale:", error);
       alert("Erro ao excluir a venda.");
+    }
+  };
+
+  const handleUndoPayment = async (saleId: string, paymentId: string, paymentAmount: number) => {
+    if (!window.confirm(`Deseja realmente desfazer este pagamento de ${formatCurrency(paymentAmount)}? O saldo devedor retornará.`)) return;
+
+    try {
+      const currentSale = sales.find(s => s.id === saleId);
+      if (!currentSale) return;
+
+      const updatedPayments = (currentSale.payments || []).filter(p => p.id !== paymentId);
+      
+      const newAmountPaid = updatedPayments.reduce((acc, p) => acc + p.amount, 0);
+      const newRemainingValue = currentSale.totalValue - newAmountPaid;
+
+      const updatedSale = await api.updateSale(saleId, {
+        amountPaid: newAmountPaid,
+        remainingValue: newRemainingValue,
+        payments: updatedPayments,
+      });
+
+      setSales(
+        sales.map((s) =>
+          s.id === saleId
+            ? { ...s, amountPaid: newAmountPaid, remainingValue: newRemainingValue, payments: updatedPayments }
+            : s
+        ),
+      );
+    } catch (error) {
+      console.error("Error undoing payment:", error);
+      alert("Erro ao desfazer o pagamento.");
     }
   };
 
@@ -543,6 +575,7 @@ export default function Vendas() {
       setCart([]);
       setPaymentStatus('pago');
       setAmountPaid("");
+      setPaymentNotes("");
       setEditingSaleId(null);
       setCheckoutStep("cart");
     }
@@ -619,6 +652,7 @@ export default function Vendas() {
                 setSelectedClientId("");
                 setPaymentStatus('pago');
                 setAmountPaid("");
+                setPaymentNotes("");
                 setCheckoutStep("cart");
                 // Re-fetch products to reset local stock adjustments
                 const updatedProducts = await api.getProducts();
@@ -1169,6 +1203,17 @@ export default function Vendas() {
                     </p>
                   </div>
                 )}
+                
+                <div className="pt-3 border-t border-slate-100">
+                  <p className="text-xs text-slate-500 mb-1">Observações do Pagamento (opcional)</p>
+                  <input
+                    type="text"
+                    placeholder="Ex: Entrada do mês, Abatimento..."
+                    value={paymentNotes}
+                    onChange={(e) => setPaymentNotes(e.target.value)}
+                    className="w-full rounded-lg border border-primary/20 bg-background-light focus:border-primary focus:ring-1 focus:ring-primary h-10 px-3 outline-none text-sm text-slate-700"
+                  />
+                </div>
               </div>
 
               <div className="p-4 rounded-xl border border-primary/10 bg-white flex items-start gap-3">
@@ -1196,6 +1241,7 @@ export default function Vendas() {
                     setCart([]);
                     setPaymentStatus('pago');
                     setAmountPaid("");
+                    setPaymentNotes("");
                     setCheckoutStep("cart");
                     setActiveTab("historico");
                   }}
@@ -1368,12 +1414,25 @@ export default function Vendas() {
                                     <div className="flex flex-col">
                                       <span className="text-emerald-700 font-bold">
                                         {new Date(payment.paymentDate).toLocaleDateString("pt-BR")}
+                                        {payment.paymentMethod && <span className="ml-2 font-normal">({payment.paymentMethod})</span>}
                                       </span>
                                       {payment.notes && <span className="text-emerald-600 text-xs">{payment.notes}</span>}
                                     </div>
-                                    <span className="font-bold text-emerald-800">
-                                      +{formatCurrency(payment.amount)}
-                                    </span>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-bold text-emerald-800">
+                                        +{formatCurrency(payment.amount)}
+                                      </span>
+                                      <button 
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleUndoPayment(sale.id, payment.id, payment.amount);
+                                        }}
+                                        className="text-red-400 hover:text-red-600 bg-red-100/50 p-1 rounded transition-colors"
+                                        title="Desfazer este pagamento específico"
+                                      >
+                                        <Trash2 size={12} />
+                                      </button>
+                                    </div>
                                   </div>
                                 ))}
                               </div>
@@ -1435,6 +1494,7 @@ export default function Vendas() {
                   setCart([]);
                   setPaymentStatus('pago');
                   setAmountPaid("");
+                  setPaymentNotes("");
                   setEditingSaleId(null);
                   setCheckoutStep("cart");
                 }}
