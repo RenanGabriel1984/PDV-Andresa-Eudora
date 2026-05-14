@@ -87,6 +87,7 @@ export default function Vendas() {
   const [filterClient, setFilterClient] = useState("");
   const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
   const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
+  const [checkoutStep, setCheckoutStep] = useState<"cart" | "payment">("cart");
 
   const clientsById = useMemo(() => {
     const map: Record<string, Client> = {};
@@ -543,6 +544,7 @@ export default function Vendas() {
       setPaymentStatus('pago');
       setAmountPaid("");
       setEditingSaleId(null);
+      setCheckoutStep("cart");
     }
   };
 
@@ -586,13 +588,19 @@ export default function Vendas() {
         {/* TABS */}
         <div className="flex bg-white rounded-xl p-1 border border-primary/10 shadow-sm">
           <button
-            onClick={() => setActiveTab("nova")}
+            onClick={() => {
+              setActiveTab("nova");
+              setCheckoutStep("cart");
+            }}
             className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${activeTab === "nova" ? "bg-primary text-white" : "text-slate-500 hover:bg-slate-50"}`}
           >
             {editingSaleId ? "Editar Venda" : "Nova Venda"}
           </button>
           <button
-            onClick={() => setActiveTab("historico")}
+            onClick={() => {
+              setActiveTab("historico");
+              setCheckoutStep("cart");
+            }}
             className={`flex-1 py-2 text-sm font-bold rounded-lg transition-colors ${activeTab === "historico" ? "bg-primary text-white" : "text-slate-500 hover:bg-slate-50"}`}
           >
             Histórico
@@ -611,6 +619,7 @@ export default function Vendas() {
                 setSelectedClientId("");
                 setPaymentStatus('pago');
                 setAmountPaid("");
+                setCheckoutStep("cart");
                 // Re-fetch products to reset local stock adjustments
                 const updatedProducts = await api.getProducts();
                 setProducts(updatedProducts);
@@ -623,8 +632,10 @@ export default function Vendas() {
         )}
 
         {activeTab === "nova" ? (
-          <>
-            {/* CLIENT SECTION */}
+          <div className="space-y-6">
+            {checkoutStep === "cart" ? (
+              <>
+                {/* CLIENT SECTION */}
             <section className="space-y-3">
               <div className="flex justify-between items-center">
                 <h3 className="text-sm font-semibold uppercase tracking-wider text-primary italic">
@@ -798,8 +809,12 @@ export default function Vendas() {
 
               {/* CART ITEMS */}
               {cart.length > 0 && (
-                <div className="bg-white rounded-xl border border-primary/10 shadow-sm overflow-hidden mt-3">
-                  {cart.map((item) => (
+                <div className="mt-6 space-y-3">
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-primary italic flex items-center gap-2">
+                    <ShoppingCart size={16} /> Carrinho
+                  </h3>
+                  <div className="bg-white rounded-xl border border-primary/10 shadow-sm overflow-hidden">
+                    {cart.map((item) => (
                     <div
                       key={item.product.id}
                       className="p-3 border-b border-slate-100 last:border-0 flex justify-between items-center"
@@ -887,6 +902,7 @@ export default function Vendas() {
                       </div>
                     </div>
                   ))}
+                  </div>
                 </div>
               )}
 
@@ -901,8 +917,49 @@ export default function Vendas() {
               </div>
             </section>
 
+            <div className="pt-4">
+              <button
+                onClick={() => {
+                  if (!selectedClientId) {
+                    alert("Selecione ou crie um cliente para continuar.");
+                    return;
+                  }
+                  if (cart.length === 0) {
+                    alert("Adicione pelo menos um produto ao carrinho.");
+                    return;
+                  }
+                  setCheckoutStep("payment");
+                }}
+                className="w-full h-14 bg-primary text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all"
+              >
+                Prosseguir para Pagamento
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
             {/* PAYMENT SECTION */}
             <section className="space-y-4">
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={() => setCheckoutStep("cart")}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 p-2 rounded-lg transition-colors"
+                >
+                  <ChevronDown className="rotate-90" size={20} />
+                </button>
+                <h2 className="text-lg font-bold text-slate-800">Pagamento</h2>
+              </div>
+              
+              <div className="bg-primary/5 rounded-xl p-4 border border-primary/10 mb-4">
+                <div className="flex justify-between items-center text-sm mb-1">
+                  <span className="text-slate-600">Cliente</span>
+                  <span className="font-bold text-slate-900">{selectedClient?.name}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-600">Total</span>
+                  <span className="font-bold text-primary">{formatCurrency(totalValue)}</span>
+                </div>
+              </div>
               <h3 className="text-sm font-semibold uppercase tracking-wider text-primary italic">
                 Forma de Pagamento
               </h3>
@@ -1139,6 +1196,7 @@ export default function Vendas() {
                     setCart([]);
                     setPaymentStatus('pago');
                     setAmountPaid("");
+                    setCheckoutStep("cart");
                     setActiveTab("historico");
                   }}
                   className="w-full h-12 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-50 transition-all"
@@ -1148,6 +1206,8 @@ export default function Vendas() {
               )}
             </div>
           </>
+        )}
+          </div>
         ) : (
           <section className="space-y-4">
             <div className="bg-white p-4 rounded-xl border border-primary/10 shadow-sm space-y-3">
@@ -1376,6 +1436,7 @@ export default function Vendas() {
                   setPaymentStatus('pago');
                   setAmountPaid("");
                   setEditingSaleId(null);
+                  setCheckoutStep("cart");
                 }}
                 className="absolute top-4 right-4 text-white/80 hover:text-white"
               >
