@@ -1296,6 +1296,30 @@ export default function Vendas() {
                             </p>
                           )}
 
+                          {/* Payment History inside Vendas */}
+                          {sale.payments && sale.payments.length > 0 && (
+                            <div className="mt-4 pt-4 border-t border-slate-200">
+                              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                                Histórico de Pagamentos
+                              </h4>
+                              <div className="space-y-2">
+                                {sale.payments.map((payment) => (
+                                  <div key={payment.id} className="flex justify-between items-center text-sm bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-100">
+                                    <div className="flex flex-col">
+                                      <span className="text-emerald-700 font-bold">
+                                        {new Date(payment.paymentDate).toLocaleDateString("pt-BR")}
+                                      </span>
+                                      {payment.notes && <span className="text-emerald-600 text-xs">{payment.notes}</span>}
+                                    </div>
+                                    <span className="font-bold text-emerald-800">
+                                      +{formatCurrency(payment.amount)}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
                           <div className="flex gap-2 mt-4 pt-4 border-t border-slate-200 flex-wrap">
                             <button
                               onClick={(e) => {

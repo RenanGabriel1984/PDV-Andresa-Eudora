@@ -112,6 +112,24 @@ export default function Clientes() {
   };
 
   const confirmDelete = async (id: string) => {
+    const openBalance = getClientOpenBalance(id);
+    const clientSales = getClientSales(id);
+
+    if (openBalance > 0) {
+      alert(
+        "Não é possível excluir um cliente com saldo devedor. Resolva as pendências antes de excluir.",
+      );
+      setDeletingId(null);
+      return;
+    }
+
+    if (clientSales.length > 0) {
+      if (!window.confirm("Este cliente possui histórico de compras. A exclusão apagará também este histórico. Deseja continuar?")) {
+        setDeletingId(null);
+        return;
+      }
+    }
+
     try {
       await api.deleteClient(id);
       setClients(clients.filter((c) => c.id !== id));
@@ -382,6 +400,37 @@ export default function Clientes() {
     } catch (error) {
       console.error("Error resetting payment:", error);
       alert("Erro ao zerar pagamento.");
+    }
+  };
+
+  const handleUndoPayment = async (saleId: string, paymentId: string, paymentAmount: number) => {
+    if (!window.confirm(`Deseja realmente desfazer este pagamento de ${formatCurrency(paymentAmount)}? O saldo devedor retornará.`)) return;
+
+    try {
+      const currentSale = sales.find(s => s.id === saleId);
+      if (!currentSale) return;
+
+      const updatedPayments = (currentSale.payments || []).filter(p => p.id !== paymentId);
+      
+      const newAmountPaid = updatedPayments.reduce((acc, p) => acc + p.amount, 0);
+      const newRemainingValue = currentSale.totalValue - newAmountPaid;
+
+      const updatedSale = await api.updateSale(saleId, {
+        amountPaid: newAmountPaid,
+        remainingValue: newRemainingValue,
+        payments: updatedPayments,
+      });
+
+      setSales(
+        sales.map((s) =>
+          s.id === saleId
+            ? { ...s, amountPaid: newAmountPaid, remainingValue: newRemainingValue, payments: updatedPayments }
+            : s
+        ),
+      );
+    } catch (error) {
+      console.error("Error undoing payment:", error);
+      alert("Erro ao desfazer o pagamento.");
     }
   };
 
@@ -803,9 +852,18 @@ export default function Clientes() {
                                               {new Date(payment.paymentDate).toLocaleDateString("pt-BR")}
                                               {payment.notes && <span className="text-emerald-500 ml-1">({payment.notes})</span>}
                                             </span>
-                                            <span className="font-bold text-emerald-800">
-                                              +{formatCurrency(payment.amount)}
-                                            </span>
+                                            <div className="flex items-center gap-2">
+                                              <span className="font-bold text-emerald-800">
+                                                +{formatCurrency(payment.amount)}
+                                              </span>
+                                              <button 
+                                                onClick={() => handleUndoPayment(sale.id, payment.id, payment.amount)}
+                                                className="text-red-400 hover:text-red-600 bg-red-100/50 p-1 rounded transition-colors"
+                                                title="Desfazer este pagamento específico"
+                                              >
+                                                <Trash2 size={12} />
+                                              </button>
+                                            </div>
                                           </div>
                                         ))}
                                       </div>
