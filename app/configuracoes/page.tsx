@@ -1,7 +1,7 @@
 "use client";
 
 import React from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/components/AuthProvider';
 import { Settings, ShieldAlert } from 'lucide-react';
 
 export default function Configuracoes() {

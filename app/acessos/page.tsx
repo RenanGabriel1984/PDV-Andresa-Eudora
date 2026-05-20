@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/components/AuthProvider';
 import { ShieldAlert, ShieldCheck, UserCog, DatabaseZap } from 'lucide-react';
 import { api, Profile } from '@/lib/api';
 
@@ -12,8 +12,8 @@ export default function Acessos() {
 
   useEffect(() => {
     if (role === 'admin') {
-      api.getProfiles().then((data) => {
-        setProfiles(data);
+      api.getProfiles().then(({data, error}) => {
+        if (data) setProfiles(data);
         setLoadingProfiles(false);
       });
     } else {

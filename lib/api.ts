@@ -9,25 +9,19 @@ export interface Profile {
 
 export const api = {
   // Profiles
-  async getProfiles(): Promise<Profile[]> {
+  async getProfiles(): Promise<{data: Profile[], error: string | null}> {
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .order('created_at', { ascending: false });
-      
-      if (error) {
-        console.warn("Profiles table might not exist or permission denied. Returning mock/blank.", error);
-        return [];
-      }
-      return data as Profile[];
-    } catch (e) {
-      console.error(e);
-      return [];
+      return { data: data as Profile[] || [], error: error?.message || null };
+    } catch (e: any) {
+      return { data: [], error: e.message };
     }
   },
   
-  async updateProfileRole(id: string, role: "admin" | "vendedor"): Promise<void> {
+  async updateProfileRole(id: string, role: "admin" | "vendedor") {
     const { error } = await supabase
       .from("profiles")
       .update({ role })
@@ -35,9 +29,33 @@ export const api = {
     if (error) throw error;
   },
   
-  // Safe mock abstractions for generic items (Estoque, Vendas, etc) 
-  // to ensure UI renders properly if DB schema is different
-  async ping() {
-    return true;
+  // Vendas
+  async getVendas(): Promise<{data: any[], error: string | null}> {
+    try {
+      const { data, error } = await supabase.from('vendas').select('*').order('created_at', { ascending: false }).limit(50);
+      return { data: data || [], error: error?.message || null };
+    } catch (e: any) {
+      return { data: [], error: e.message };
+    }
+  },
+
+  // Estoque (Produtos)
+  async getProdutos(): Promise<{data: any[], error: string | null}> {
+    try {
+      const { data, error } = await supabase.from('produtos').select('*').order('created_at', { ascending: false }).limit(50);
+      return { data: data || [], error: error?.message || null };
+    } catch (e: any) {
+      return { data: [], error: e.message };
+    }
+  },
+
+  // Clientes
+  async getClientes(): Promise<{data: any[], error: string | null}> {
+    try {
+      const { data, error } = await supabase.from('clientes').select('*').order('created_at', { ascending: false }).limit(50);
+      return { data: data || [], error: error?.message || null };
+    } catch (e: any) {
+      return { data: [], error: e.message };
+    }
   }
 };
