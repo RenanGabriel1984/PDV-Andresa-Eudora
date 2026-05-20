@@ -2,25 +2,12 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Header from "@/components/Header";
-import {
-  PlusCircle,
-  Sparkles,
-  Palette,
-  Heart,
-  Droplet,
-  Scissors,
-  Brush,
-  MoreVertical,
-  Package,
-  Edit2,
-  X,
-  Check,
-  ArrowUp,
-  ArrowDown,
-} from "lucide-react";
+import { PlusCircle, Sparkles, Palette, Heart, Droplet, Scissors, Brush, MoreVertical, Package, Edit2, X, Check, ArrowUp, ArrowDown } from "lucide-react";
 import { api, Product } from "@/lib/api";
+import { useProfile } from "@/hooks/useProfile";
 
 export default function Estoque() {
+  const { profile } = useProfile();
   const [categories, setCategories] = useState([
     "Perfume",
     "Shampoo",
@@ -283,138 +270,142 @@ export default function Estoque() {
             </div>
 
             <div className="px-4 py-4">
-              <div
-                className="flex justify-between items-center cursor-pointer bg-white p-4 rounded-xl border border-primary/10 shadow-sm mb-4"
-                onClick={() =>
-                  setIsAddingProductFormOpen(!isAddingProductFormOpen)
-                }
-              >
-                <h3 className="text-slate-900 text-lg font-bold flex items-center gap-2">
-                  <PlusCircle className="text-primary" size={20} />
-                  Adicionar Novo Produto
-                </h3>
-                <span className="text-primary font-bold">
-                  {isAddingProductFormOpen ? "−" : "+"}
-                </span>
-              </div>
+              {profile?.role === "admin" && (
+                <>
+                  <div
+                    className="flex justify-between items-center cursor-pointer bg-white p-4 rounded-xl border border-primary/10 shadow-sm mb-4"
+                    onClick={() =>
+                      setIsAddingProductFormOpen(!isAddingProductFormOpen)
+                    }
+                  >
+                    <h3 className="text-slate-900 text-lg font-bold flex items-center gap-2">
+                      <PlusCircle className="text-primary" size={20} />
+                      Adicionar Novo Produto
+                    </h3>
+                    <span className="text-primary font-bold">
+                      {isAddingProductFormOpen ? "−" : "+"}
+                    </span>
+                  </div>
 
-              {isAddingProductFormOpen && (
-                <form
-                  onSubmit={handleSubmit}
-                  className="space-y-4 bg-white p-6 rounded-xl border border-primary/10 shadow-sm animate-in slide-in-from-top-4 duration-300"
-                >
-                  <label className="flex flex-col w-full">
-                    <p className="text-slate-700 text-sm font-semibold pb-2">
-                      Nome do Produto
-                    </p>
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Ex: Perfume Floral Intenso"
-                      required
-                      className="flex w-full rounded-lg text-slate-900 border border-primary/20 bg-background-light focus:border-primary focus:ring-1 focus:ring-primary h-12 px-4 text-base outline-none"
-                    />
-                  </label>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="flex flex-col w-full">
-                      <p className="text-slate-700 text-sm font-semibold pb-2">
-                        Categoria
-                      </p>
-                      {isAddingCategory ? (
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={newCategory}
-                            onChange={(e) => setNewCategory(e.target.value)}
-                            placeholder="Nova categoria"
-                            className="flex w-full rounded-lg text-slate-900 border border-primary/20 bg-background-light focus:border-primary focus:ring-1 focus:ring-primary h-12 px-4 text-base outline-none"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleAddCategory}
-                            className="h-12 px-4 bg-primary text-white rounded-lg font-bold"
-                          >
-                            Add
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setIsAddingCategory(false)}
-                            className="h-12 px-4 bg-slate-200 text-slate-600 rounded-lg font-bold"
-                          >
-                            X
-                          </button>
-                        </div>
-                      ) : (
-                        <select
-                          value={category}
-                          onChange={(e) => {
-                            if (e.target.value === "new") {
-                              setIsAddingCategory(true);
-                              setCategory("");
-                            } else {
-                              setCategory(e.target.value);
-                            }
-                          }}
-                          required
-                          className="flex w-full rounded-lg text-slate-900 border border-primary/20 bg-background-light focus:border-primary focus:ring-1 focus:ring-primary h-12 px-4 text-base outline-none"
-                        >
-                          <option value="">Selecione...</option>
-                          {categories.map((cat) => (
-                            <option key={cat} value={cat}>
-                              {cat}
-                            </option>
-                          ))}
-                          <option
-                            value="new"
-                            className="font-bold text-primary"
-                          >
-                            + Nova Categoria
-                          </option>
-                        </select>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
+                  {isAddingProductFormOpen && (
+                    <form
+                      onSubmit={handleSubmit}
+                      className="space-y-4 bg-white p-6 rounded-xl border border-primary/10 shadow-sm animate-in slide-in-from-top-4 duration-300"
+                    >
                       <label className="flex flex-col w-full">
                         <p className="text-slate-700 text-sm font-semibold pb-2">
-                          Quantidade
-                        </p>
-                        <input
-                          type="number"
-                          value={quantity}
-                          onChange={(e) => setQuantity(e.target.value)}
-                          placeholder="0"
-                          min="0"
-                          required
-                          className="flex w-full rounded-lg text-slate-900 border border-primary/20 bg-background-light focus:border-primary focus:ring-1 focus:ring-primary h-12 px-4 text-base outline-none"
-                        />
-                      </label>
-                      <label className="flex flex-col w-full">
-                        <p className="text-slate-700 text-sm font-semibold pb-2">
-                          Preço (R$)
+                          Nome do Produto
                         </p>
                         <input
                           type="text"
-                          value={price}
-                          onChange={handlePriceChange}
-                          placeholder="0,00"
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          placeholder="Ex: Perfume Floral Intenso"
                           required
                           className="flex w-full rounded-lg text-slate-900 border border-primary/20 bg-background-light focus:border-primary focus:ring-1 focus:ring-primary h-12 px-4 text-base outline-none"
                         />
                       </label>
-                    </div>
-                  </div>
 
-                  <button
-                    type="submit"
-                    className="w-full bg-primary text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/20 hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 mt-4"
-                  >
-                    <PlusCircle className="text-gold" size={24} />
-                    Salvar Produto
-                  </button>
-                </form>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="flex flex-col w-full">
+                          <p className="text-slate-700 text-sm font-semibold pb-2">
+                            Categoria
+                          </p>
+                          {isAddingCategory ? (
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={newCategory}
+                                onChange={(e) => setNewCategory(e.target.value)}
+                                placeholder="Nova categoria"
+                                className="flex w-full rounded-lg text-slate-900 border border-primary/20 bg-background-light focus:border-primary focus:ring-1 focus:ring-primary h-12 px-4 text-base outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={handleAddCategory}
+                                className="h-12 px-4 bg-primary text-white rounded-lg font-bold"
+                              >
+                                Add
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setIsAddingCategory(false)}
+                                className="h-12 px-4 bg-slate-200 text-slate-600 rounded-lg font-bold"
+                              >
+                                X
+                              </button>
+                            </div>
+                          ) : (
+                            <select
+                              value={category}
+                              onChange={(e) => {
+                                if (e.target.value === "new") {
+                                  setIsAddingCategory(true);
+                                  setCategory("");
+                                } else {
+                                  setCategory(e.target.value);
+                                }
+                              }}
+                              required
+                              className="flex w-full rounded-lg text-slate-900 border border-primary/20 bg-background-light focus:border-primary focus:ring-1 focus:ring-primary h-12 px-4 text-base outline-none"
+                            >
+                              <option value="">Selecione...</option>
+                              {categories.map((cat) => (
+                                <option key={cat} value={cat}>
+                                  {cat}
+                                </option>
+                              ))}
+                              <option
+                                value="new"
+                                className="font-bold text-primary"
+                              >
+                                + Nova Categoria
+                              </option>
+                            </select>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <label className="flex flex-col w-full">
+                            <p className="text-slate-700 text-sm font-semibold pb-2">
+                              Quantidade
+                            </p>
+                            <input
+                              type="number"
+                              value={quantity}
+                              onChange={(e) => setQuantity(e.target.value)}
+                              placeholder="0"
+                              min="0"
+                              required
+                              className="flex w-full rounded-lg text-slate-900 border border-primary/20 bg-background-light focus:border-primary focus:ring-1 focus:ring-primary h-12 px-4 text-base outline-none"
+                            />
+                          </label>
+                          <label className="flex flex-col w-full">
+                            <p className="text-slate-700 text-sm font-semibold pb-2">
+                              Preço (R$)
+                            </p>
+                            <input
+                              type="text"
+                              value={price}
+                              onChange={handlePriceChange}
+                              placeholder="0,00"
+                              required
+                              className="flex w-full rounded-lg text-slate-900 border border-primary/20 bg-background-light focus:border-primary focus:ring-1 focus:ring-primary h-12 px-4 text-base outline-none"
+                            />
+                          </label>
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="w-full bg-primary text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/20 hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 mt-4"
+                      >
+                        <PlusCircle className="text-gold" size={24} />
+                        Salvar Produto
+                      </button>
+                    </form>
+                  )}
+                </>
               )}
             </div>
 
@@ -525,7 +516,7 @@ export default function Estoque() {
                       </p>
                     </div>
                     <div className="text-right flex flex-col items-end shrink-0">
-                      {editingProductId === product.id ? (
+                      {editingProductId === product.id && profile?.role === "admin" ? (
                         <div className="flex items-center gap-1 mb-1">
                           <input
                             type="text"
@@ -554,10 +545,12 @@ export default function Estoque() {
                         </div>
                       ) : (
                         <div
-                          className="flex items-center gap-2 group cursor-pointer"
+                          className={`flex items-center gap-2 ${profile?.role === "admin" ? "group cursor-pointer" : ""}`}
                           onClick={() => {
-                            setEditingProductId(product.id);
-                            setEditPrice(formatPrice(product.price.toFixed(2)));
+                            if (profile?.role === "admin") {
+                              setEditingProductId(product.id);
+                              setEditPrice(formatPrice(product.price.toFixed(2)));
+                            }
                           }}
                         >
                           <p className="text-primary font-bold">
@@ -567,10 +560,12 @@ export default function Estoque() {
                               maximumFractionDigits: 2,
                             })}
                           </p>
-                          <Edit2
-                            size={14}
-                            className="text-slate-300 group-hover:text-primary transition-colors"
-                          />
+                          {profile?.role === "admin" && (
+                            <Edit2
+                              size={14}
+                              className="text-slate-300 group-hover:text-primary transition-colors"
+                            />
+                          )}
                         </div>
                       )}
                       <div className="flex items-center gap-2 mt-1">

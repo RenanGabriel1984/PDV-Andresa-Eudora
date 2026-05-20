@@ -1,33 +1,24 @@
 'use client';
 
-import { useEffect, useState, createContext, useContext } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import BottomNav from '@/components/BottomNav';
 
-export const AuthContext = createContext<{ session: Session | null; role: 'admin' | 'revendedor' | null }>({ session: null, role: null });
-
-export const useAuth = () => useContext(AuthContext);
-
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
-  const [role, setRole] = useState<'admin' | 'revendedor' | null>(null);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
-  const [isSignUpMode, setIsSignUpMode] = useState(false);
+  const [isSignUpMode, setIsSignUpMode] = useState(false); // Toggle between Login and Sign Up mode
 
   const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      if (session?.user) {
-        fetchUserRole(session.user.id);
-      } else {
-        setLoading(false);
-      }
+      setLoading(false);
     }).catch((error) => {
       console.error('Error getting session:', error);
       setLoading(false);
@@ -37,37 +28,10 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      if (session?.user) {
-        fetchUserRole(session.user.id);
-      } else {
-        setRole(null);
-      }
     });
 
     return () => subscription.unsubscribe();
   }, []);
-
-  const fetchUserRole = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', userId)
-        .single();
-      
-      if (error && error.code !== 'PGRST116') {
-        console.warn('Could not fetch role, defaulting to admin/revendedor', error);
-      }
-      
-      // Se não existir na tabela, consideramos como 'admin' provisoriamente para não quebrar o app
-      // O ideal é sempre ter os níveis definidos no banco.
-      setRole(data?.role || 'admin');
-    } catch (err) {
-      setRole('admin');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -207,9 +171,9 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   }
 
   return (
-    <AuthContext.Provider value={{ session, role }}>
+    <>
       {children}
       <BottomNav />
-    </AuthContext.Provider>
+    </>
   );
 }

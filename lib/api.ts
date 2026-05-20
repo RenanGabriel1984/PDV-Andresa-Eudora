@@ -57,7 +57,35 @@ export interface StockMovement {
   date: string;
 }
 
+export interface Profile {
+  id: string;
+  email: string;
+  role: "admin" | "vendedor";
+  created_at?: string;
+}
+
 export const api = {
+  // Profiles
+  async getProfiles(): Promise<Profile[]> {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) {
+       if (error.code === '42P01') return []; // Table not found yet
+       console.error("Error fetching profiles:", error);
+       return [];
+    }
+    return data as Profile[];
+  },
+  async updateProfileRole(id: string, role: "admin" | "vendedor"): Promise<void> {
+    const { error } = await supabase
+      .from("profiles")
+      .update({ role })
+      .eq("id", id);
+    if (error) throw error;
+  },
+
   // Clients
   async getClients(): Promise<Client[]> {
     const { data, error } = await supabase

@@ -17,10 +17,6 @@ import {
   Coins,
   AlertCircle,
   Download,
-  CalendarDays,
-  Tag,
-  ArrowRight,
-  ShoppingBag
 } from "lucide-react";
 import { api, Product, Sale } from "@/lib/api";
 import { exportToPDF } from "@/lib/export";
@@ -546,12 +542,6 @@ export default function Dashboard() {
                     Desempenho nos últimos 6 meses
                   </p>
                 </div>
-                {growth !== 0 && (
-                  <div className={`flex items-center gap-1 px-3 py-1.5 rounded-full ${growth > 0 ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600"} border ${growth > 0 ? "border-emerald-100" : "border-red-100"}`}>
-                    {growth > 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
-                    <span className="text-sm font-bold">{Math.abs(growth).toFixed(1)}%</span>
-                  </div>
-                )}
               </div>
 
               <div className="h-64 w-full">
@@ -611,31 +601,8 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Analytics Middle Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              {/* Top Categorias */}
-              <div className="rounded-xl bg-white p-6 shadow-sm border border-primary/5 flex flex-col">
-                <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                  <Tag className="text-primary" size={20} />
-                  Top Categorias
-                </h3>
-                <div className="space-y-5 flex-1 flex flex-col justify-center">
-                  {topCategories.length > 0 ? topCategories.map((cat, idx) => (
-                    <div key={idx}>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="font-medium text-slate-700">{cat.name}</span>
-                        <span className="font-bold text-slate-800 text-xs">{formatCurrency(cat.value)}</span>
-                      </div>
-                      <div className="w-full bg-slate-100 rounded-full h-2">
-                        <div className={`h-2 rounded-full ${cat.color} transition-all duration-500`} style={{ width: `${Math.max(cat.percent, 2)}%` }}></div>
-                      </div>
-                    </div>
-                  )) : (
-                    <p className="text-sm text-slate-500 text-center">Nenhum dado de categoria.</p>
-                  )}
-                </div>
-              </div>
-
+            {/* Bottom Row: Top Produtos & Categorias */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Top Produtos */}
               <div className="rounded-xl bg-white p-6 shadow-sm border border-primary/5 flex flex-col">
                 <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
@@ -654,7 +621,7 @@ export default function Dashboard() {
                     <p className="text-slate-600 text-sm font-bold">
                       {bestSellerCount}{" "}
                       <span className="text-slate-400 font-normal">
-                        unidades
+                        unidades vendidas
                       </span>
                     </p>
                   </div>
@@ -665,61 +632,22 @@ export default function Dashboard() {
               <div className="rounded-xl bg-white p-6 shadow-sm border border-primary/5 flex flex-col">
                 <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
                   <CreditCard className="text-primary" size={20} />
-                  Top Pagamento
+                  Modalidade Mais Utilizada
                 </h3>
                 <div className="flex flex-col items-center justify-center p-6 bg-slate-50 rounded-xl border border-slate-100 flex-1">
                   <p className="text-2xl font-extrabold text-center text-slate-800 capitalize">
-                    {topPaymentMethodName === "credit_card" ? "Crédito" : topPaymentMethodName === "debit_card" ? "Débito" : topPaymentMethodName === "cash" ? "Dinheiro" : topPaymentMethodName}
+                    {topPaymentMethodName}
                   </p>
                   <div className="flex items-center gap-2 mt-3">
                     <TrendingUp className="text-primary/60" size={16} />
                     <p className="text-slate-600 text-sm font-bold">
                       {topPaymentMethodCount}{" "}
                       <span className="text-slate-400 font-normal">
-                        vendas
+                        vendas registradas
                       </span>
                     </p>
                   </div>
                 </div>
-              </div>
-            </div>
-
-            {/* Vendas Recentes */}
-            <div className="rounded-xl bg-white p-6 shadow-sm border border-primary/5">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold tracking-tight">Vendas Recentes</h2>
-                <Link href="/vendas" className="text-sm text-primary font-bold hover:underline flex items-center gap-1">
-                  Ver todas <ArrowRight size={16} />
-                </Link>
-              </div>
-              <div className="space-y-3">
-                {filteredSales.slice(0, 5).map(sale => (
-                  <div key={sale.id} className="flex justify-between items-center p-3 hover:bg-slate-50 rounded-lg border border-transparent hover:border-slate-100 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                        <ShoppingBag size={18} />
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold text-slate-800">
-                          {sale.customerName || "Cliente Avulso"}
-                        </p>
-                        <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-                          <CalendarDays size={12} />
-                          {new Date(sale.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-slate-800">{formatCurrency(sale.totalValue)}</p>
-                      <span className={`inline-block mt-1 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full ${sale.paymentMethod === 'pix' ? 'bg-emerald-100 text-emerald-700' : sale.paymentMethod === 'credit_card' ? 'bg-blue-100 text-blue-700' : sale.paymentMethod === 'credit' ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-700'}`}>
-                        {sale.paymentMethod === 'credit' ? 'Fiado' : sale.paymentMethod === 'credit_card' ? 'Crédito' : sale.paymentMethod === 'debit_card' ? 'Débito' : sale.paymentMethod === 'cash' ? 'Dinheiro' : sale.paymentMethod || 'Outros'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-                {filteredSales.length === 0 && (
-                  <p className="text-center text-slate-500 py-4 text-sm">Nenhuma venda encontrada para o período.</p>
-                )}
               </div>
             </div>
           </>
