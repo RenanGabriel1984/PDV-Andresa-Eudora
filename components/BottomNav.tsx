@@ -1,36 +1,42 @@
-"use client";
+'use client';
 
-import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, ShoppingCart, Package, Users } from 'lucide-react';
+import { Home, Users, ShoppingCart, Package, Settings } from 'lucide-react';
 
 export default function BottomNav() {
   const pathname = usePathname();
-  
-  const items = [
-    { name: 'Início', href: '/', icon: Home },
-    { name: 'Vendas', href: '/vendas', icon: ShoppingCart },
-    { name: 'Estoque', href: '/estoque', icon: Package },
-    { name: 'Clientes', href: '/clientes', icon: Users },
+
+  const navItems = [
+    { href: '/', icon: Home, label: 'Início' },
+    { href: '/vendas', icon: ShoppingCart, label: 'Vendas' },
+    { href: '/clientes', icon: Users, label: 'Clientes' },
+    { href: '/estoque', icon: Package, label: 'Estoque' },
+    { href: '/configuracoes', icon: Settings, label: 'Ajustes' },
   ];
 
   return (
-    <nav className="fixed bottom-0 w-full bg-white border-t border-slate-200 flex justify-around items-center pb-safe z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] md:hidden">
-      {items.map((item) => {
-        const Icon = item.icon;
-        const isActive = pathname === item.href;
-        return (
-          <Link 
-            key={item.name} 
-            href={item.href} 
-            className={`flex flex-col items-center justify-center w-full py-3 ${isActive ? 'text-purple-700' : 'text-slate-400 hover:text-purple-400'}`}
-          >
-            <Icon size={24} className={isActive ? "fill-purple-100" : ""} />
-            <span className={`text-[10px] mt-1 ${isActive ? 'font-bold' : 'font-medium'}`}>{item.name}</span>
-          </Link>
-        );
-      })}
+    <nav className="fixed bottom-0 left-0 right-0 bg-background-light border-t border-primary/10 px-6 py-3 z-50">
+      <div className="flex items-center justify-around max-w-2xl mx-auto">
+        {navItems.map((item) => {
+          const isActive = pathname === item.href;
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex flex-col items-center gap-1 ${
+                isActive ? 'text-primary' : 'text-slate-400 hover:text-primary/70'
+              } transition-colors`}
+            >
+              <Icon size={24} className={isActive ? 'fill-primary/20' : ''} />
+              <span className="text-[10px] font-bold uppercase tracking-wider">
+                {item.label}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
     </nav>
   );
 }

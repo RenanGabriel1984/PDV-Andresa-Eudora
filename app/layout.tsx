@@ -1,12 +1,16 @@
-import type { Metadata } from 'next';
-import './globals.css';
-import { AuthProvider } from '@/components/AuthProvider';
-import Header from '@/components/Header';
-import BottomNav from '@/components/BottomNav';
+import type { Metadata } from "next";
+import { Manrope } from "next/font/google";
+import "./globals.css"; // Global styles
+import AuthProvider from "@/components/AuthProvider";
+
+const manrope = Manrope({
+  subsets: ["latin"],
+  variable: "--font-manrope",
+});
 
 export const metadata: Metadata = {
-  title: 'PDV Andresa',
-  description: 'Sistema de Ponto de Venda e Gestão',
+  title: "Andresa Eudora - Gestão",
+  description: "Aplicativo de gestão para revendedoras",
 };
 
 export default function RootLayout({
@@ -15,17 +19,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-BR">
-      <body className="bg-slate-50 min-h-screen pb-20 md:pb-0 font-sans text-slate-800 selection:bg-purple-200">
-        <AuthProvider>
-          <div className="flex flex-col min-h-screen max-w-3xl mx-auto bg-slate-50 shadow-2xl relative">
-            <Header />
-            <main className="flex-1 w-full p-4 md:p-6 overflow-x-hidden">
-              {children}
-            </main>
-            <BottomNav />
-          </div>
-        </AuthProvider>
+    <html lang="pt-BR" className={`${manrope.variable}`}>
+      <body
+        suppressHydrationWarning
+        className="bg-background-light font-display text-slate-900 min-h-screen pb-20"
+      >
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );
