@@ -4,11 +4,9 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import BottomNav from '@/components/BottomNav';
-import { AuthContext, UserProfile } from '@/hooks/useAuth';
 
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -18,54 +16,21 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
-    let mounted = true;
-
-    async function loadProfile(userId: string) {
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .single();
-        
-        if (mounted && data) {
-          setProfile(data as UserProfile);
-        }
-      } catch (err) {
-        console.error('Error fetching profile:', err);
-      }
-    }
-
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (mounted) {
-        setSession(session);
-        if (session?.user) {
-          await loadProfile(session.user.id);
-        }
-        setLoading(false);
-      }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
     }).catch((error) => {
       console.error('Error getting session:', error);
-      if (mounted) setLoading(false);
+      setLoading(false);
     });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (mounted) {
-        setSession(session);
-        if (session?.user) {
-          await loadProfile(session.user.id);
-        } else {
-          setProfile(null);
-        }
-      }
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
     });
 
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -206,17 +171,9 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   }
 
   return (
-    <AuthContext.Provider value={{
-      session,
-      user: session?.user ?? null,
-      profile,
-      role: profile?.role ?? null,
-      loading,
-      signIn: async () => {}, /* Handle directly inside the gated UI */
-      signOut: async () => { await supabase.auth.signOut(); }
-    }}>
+    <>
       {children}
       <BottomNav />
-    </AuthContext.Provider>
+    </>
   );
 }

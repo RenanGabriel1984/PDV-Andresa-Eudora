@@ -1,25 +1,24 @@
 'use client';
 
-import { useAuth } from '@/hooks/useAuth';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { Home, Users, ShoppingCart, Package, Settings } from 'lucide-react';
 
 export default function BottomNav() {
   const pathname = usePathname();
-  const { role } = useAuth();
 
   const navItems = [
-    { href: '/', icon: Home, label: 'Início', adminOnly: false },
-    { href: '/vendas', icon: ShoppingCart, label: 'Vendas', adminOnly: false },
-    { href: '/clientes', icon: Users, label: 'Clientes', adminOnly: false },
-    { href: '/estoque', icon: Package, label: 'Estoque', adminOnly: true },
-    { href: '/configuracoes', icon: Settings, label: 'Ajustes', adminOnly: true },
+    { href: '/', icon: Home, label: 'Início' },
+    { href: '/vendas', icon: ShoppingCart, label: 'Vendas' },
+    { href: '/clientes', icon: Users, label: 'Clientes' },
+    { href: '/estoque', icon: Package, label: 'Estoque' },
+    { href: '/configuracoes', icon: Settings, label: 'Ajustes' },
   ];
-
-  const visibleNavItems = navItems.filter((item) => !item.adminOnly || role === 'admin');
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-background-light border-t border-primary/10 px-6 py-3 z-50">
       <div className="flex items-center justify-around max-w-2xl mx-auto">
-        {visibleNavItems.map((item) => {
+        {navItems.map((item) => {
           const isActive = pathname === item.href;
           const Icon = item.icon;
           return (
