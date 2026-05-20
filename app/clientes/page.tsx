@@ -2,29 +2,14 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Header from "@/components/Header";
-import {
-  Plus,
-  Search,
-  MapPin,
-  Phone,
-  Edit2,
-  Trash2,
-  ChevronDown,
-  ChevronUp,
-  AlertCircle,
-  ShoppingBag,
-  User,
-  CheckCircle,
-  Wallet,
-  MessageCircle,
-  Download,
-} from "lucide-react";
+import { Plus, Search, MapPin, Phone, Edit2, Trash2, ChevronDown, ChevronUp, AlertCircle, ShoppingBag, User, CheckCircle, Wallet, MessageCircle, Download } from "lucide-react";
 import { api, Client, Sale, Product } from "@/lib/api";
-
+import { useAuth } from "@/components/AuthProvider";
 import { getStoreSettings } from "@/lib/storeSettings";
 import { exportToExcel, exportToPDF } from "@/lib/export";
 
 export default function Clientes() {
+  const { role } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -771,13 +756,15 @@ export default function Clientes() {
                                       "pt-BR",
                                     )}
                                   </p>
-                                  <button
-                                    onClick={() => handleDeleteSale(sale.id)}
-                                    className="text-red-400 hover:text-red-600 p-1"
-                                    title="Excluir Venda"
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
+                                  {role === 'admin' && (
+                                    <button
+                                      onClick={() => handleDeleteSale(sale.id)}
+                                      className="text-red-400 hover:text-red-600 p-1"
+                                      title="Excluir Venda"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  )}
                                 </div>
                                 <div className="text-right">
                                   <p className="text-sm font-bold text-primary">
