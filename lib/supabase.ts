@@ -1,16 +1,7 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from '@supabase/supabase-js';
 
-let supabaseUrl =
-  process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
-const supabaseAnonKey =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder";
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-// Ensure the URL is valid to prevent app crashes on reload
-try {
-  new URL(supabaseUrl);
-} catch (e) {
-  console.warn("Invalid NEXT_PUBLIC_SUPABASE_URL provided. Using placeholder.");
-  supabaseUrl = "https://placeholder.supabase.co";
-}
-
+// Create a single supabase client for interacting with your database
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);

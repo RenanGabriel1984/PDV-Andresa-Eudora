@@ -1,16 +1,11 @@
-import type { Metadata } from "next";
-import { Manrope } from "next/font/google";
-import "./globals.css"; // Global styles
-import AuthProvider from "@/components/AuthProvider";
-
-const manrope = Manrope({
-  subsets: ["latin"],
-  variable: "--font-manrope",
-});
+import type { Metadata } from 'next';
+import './globals.css';
+import { AuthProvider } from '@/contexts/AuthContext';
+import { LayoutWrapper } from '@/components/LayoutWrapper';
 
 export const metadata: Metadata = {
-  title: "Andresa Eudora - Gestão",
-  description: "Aplicativo de gestão para revendedoras",
+  title: 'Sistema de Vendas',
+  description: 'Dashboard de vendas e acessos com múltiplos usuários',
 };
 
 export default function RootLayout({
@@ -19,12 +14,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-BR" className={`${manrope.variable}`}>
-      <body
-        suppressHydrationWarning
-        className="bg-background-light font-display text-slate-900 min-h-screen pb-20"
-      >
-        <AuthProvider>{children}</AuthProvider>
+    <html lang="pt-BR">
+      <body>
+        <AuthProvider>
+          <LayoutWrapper>
+            {children}
+          </LayoutWrapper>
+        </AuthProvider>
       </body>
     </html>
   );
