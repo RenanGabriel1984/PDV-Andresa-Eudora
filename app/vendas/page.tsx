@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import Header from "@/components/Header";
 import {
   ChevronDown,
@@ -23,7 +24,7 @@ import {
   Banknote,
   Download,
 } from "lucide-react";
-import { api, Client, Product, Sale, SaleItem } from "@/lib/api";
+import { api, Client, Product, Sale, SaleItem, Payment } from "@/lib/api";
 
 interface CartItem {
   product: Product;
@@ -90,6 +91,38 @@ export default function Vendas() {
   const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
   const [checkoutStep, setCheckoutStep] = useState<"cart" | "payment">("cart");
 
+  // Edit payment modal state
+  const [editingPayment, setEditingPayment] = useState<{
+    saleId: string;
+    payment: Payment;
+  } | null>(null);
+  const [editPaymentAmount, setEditPaymentAmount] = useState("");
+  const [editPaymentDate, setEditPaymentDate] = useState("");
+  const [editPaymentMethod, setEditPaymentMethod] = useState("Pix");
+  const [editPaymentNotes, setEditPaymentNotes] = useState("");
+
+  // UI States for Autocomplete
+  const [clientSearchText, setClientSearchText] = useState("");
+  const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
+  const clientDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [productSearchText, setProductSearchText] = useState("");
+  const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
+  const productDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (clientDropdownRef.current && !clientDropdownRef.current.contains(event.target as Node)) {
+        setIsClientDropdownOpen(false);
+      }
+      if (productDropdownRef.current && !productDropdownRef.current.contains(event.target as Node)) {
+        setIsProductDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const clientsById = useMemo(() => {
     const map: Record<string, Client> = {};
     clients.forEach((c) => {
@@ -128,6 +161,13 @@ export default function Vendas() {
     () => clientsById[selectedClientId],
     [clientsById, selectedClientId],
   );
+
+  const getClientDebt = (clientId: string) => {
+    return sales
+      .filter((s) => s.clientId === clientId && (s.remainingValue || 0) > 0)
+      .reduce((sum, s) => sum + (s.remainingValue || 0), 0);
+  };
+
   const totalValue = useMemo(
     () =>
       cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0),
@@ -395,17 +435,91 @@ export default function Vendas() {
     }
   };
 
+  const handleOpenEditPayment = (saleId: string, payment: Payment) => {
+    setEditingPayment({ saleId, payment });
+    setEditPaymentAmount(formatPriceInput((payment.amount * 100).toFixed(0)));
+    setEditPaymentDate(payment.paymentDate ? payment.paymentDate.split("T")[0] : new Date().toISOString().split("T")[0]);
+    setEditPaymentMethod(payment.paymentMethod || "Pix");
+    setEditPaymentNotes(payment.notes || "");
+  };
+
+  const handleSaveEditPayment = async () => {
+    if (!editingPayment) return;
+    const newAmount = parsePriceInput(editPaymentAmount);
+    if (isNaN(newAmount) || newAmount <= 0) {
+      alert("Por favor, digite um valor válido maior que zero.");
+      return;
+    }
+
+    try {
+      const currentSale = sales.find((s) => s.id === editingPayment.saleId);
+      if (!currentSale) return;
+
+      const updatedPayments = (currentSale.payments || []).map((p) => {
+        if (p.id === editingPayment.payment.id) {
+          return {
+            ...p,
+            amount: newAmount,
+            paymentDate: editPaymentDate ? new Date(editPaymentDate + "T12:00:00").toISOString() : p.paymentDate,
+            paymentMethod: editPaymentMethod,
+            notes: editPaymentNotes,
+          };
+        }
+        return p;
+      });
+
+      const newAmountPaid = updatedPayments.reduce((acc, p) => acc + p.amount, 0);
+      const newRemainingValue = Math.max(0, currentSale.totalValue - newAmountPaid);
+
+      const updatedSale = await api.updateSale(editingPayment.saleId, {
+        amountPaid: newAmountPaid,
+        remainingValue: newRemainingValue,
+        payments: updatedPayments,
+      });
+
+      setSales(
+        sales.map((s) =>
+          s.id === editingPayment.saleId
+            ? { ...s, amountPaid: newAmountPaid, remainingValue: newRemainingValue, payments: updatedPayments }
+            : s
+        ),
+      );
+
+      setEditingPayment(null);
+      alert("Pagamento atualizado com sucesso!");
+    } catch (error) {
+      console.error("Error updating payment:", error);
+      alert("Erro ao salvar alterações no pagamento.");
+    }
+  };
+
   const handleUndoPayment = async (saleId: string, paymentId: string, paymentAmount: number) => {
-    if (!window.confirm(`Deseja realmente desfazer este pagamento de ${formatCurrency(paymentAmount)}? O saldo devedor retornará.`)) return;
+    const confirmed = window.confirm(
+      `Deseja realmente excluir APENAS este pagamento de ${formatCurrency(paymentAmount)}?\n\nOs outros pagamentos desta venda continuarão salvos e preservados.`
+    );
+    if (!confirmed) return;
 
     try {
       const currentSale = sales.find(s => s.id === saleId);
       if (!currentSale) return;
 
+      const paymentToDelete = (currentSale.payments || []).find(p => p.id === paymentId);
+      try {
+        const auditLog = JSON.parse(localStorage.getItem("audit_deleted_payments") || "[]");
+        auditLog.unshift({
+          deletedAt: new Date().toISOString(),
+          saleId,
+          payment: paymentToDelete,
+        });
+        localStorage.setItem("audit_deleted_payments", JSON.stringify(auditLog.slice(0, 100)));
+      } catch (err) {
+        console.warn("Could not save audit log", err);
+      }
+
       const updatedPayments = (currentSale.payments || []).filter(p => p.id !== paymentId);
       
       const newAmountPaid = updatedPayments.reduce((acc, p) => acc + p.amount, 0);
-      const newRemainingValue = currentSale.totalValue - newAmountPaid;
+      const newRemainingValue = Math.max(0, currentSale.totalValue - newAmountPaid);
 
       const updatedSale = await api.updateSale(saleId, {
         amountPaid: newAmountPaid,
@@ -666,10 +780,18 @@ export default function Vendas() {
         )}
 
         {activeTab === "nova" ? (
-          <div className="space-y-6">
-            {checkoutStep === "cart" ? (
-              <>
-                {/* CLIENT SECTION */}
+          <div className="space-y-6 relative overflow-hidden">
+            <AnimatePresence mode="wait">
+              {checkoutStep === "cart" ? (
+                <motion.div 
+                  key="cart"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ duration: 0.2 }}
+                  className="space-y-6"
+                >
+                  {/* CLIENT SECTION */}
             <section className="space-y-3">
               <div className="flex justify-between items-center">
                 <h3 className="text-sm font-semibold uppercase tracking-wider text-primary italic">
@@ -723,31 +845,73 @@ export default function Vendas() {
                   </div>
                 </div>
               ) : (
-                <div className="relative">
+                <div className="relative" ref={clientDropdownRef}>
                   <label className="flex flex-col gap-1.5">
                     <div className="relative">
-                      <select
-                        value={selectedClientId}
-                        onChange={(e) => setSelectedClientId(e.target.value)}
-                        className="w-full rounded-xl border-primary/20 bg-white text-slate-900 focus:border-primary focus:ring-primary h-14 pl-11 pr-10 appearance-none outline-none border shadow-sm"
-                      >
-                        <option value="">Buscar cliente...</option>
-                        {clients.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
+                      <input
+                        type="text"
+                        placeholder="Buscar cliente..."
+                        value={isClientDropdownOpen ? clientSearchText : (selectedClientId ? clientsById[selectedClientId]?.name : "")}
+                        onChange={(e) => {
+                          setClientSearchText(e.target.value);
+                          setIsClientDropdownOpen(true);
+                          if (selectedClientId) setSelectedClientId("");
+                        }}
+                        onFocus={() => setIsClientDropdownOpen(true)}
+                        className="w-full rounded-xl border-primary/20 bg-white text-slate-900 focus:border-primary focus:ring-primary h-14 pl-11 pr-10 outline-none border shadow-sm transition-all"
+                      />
                       <User
                         className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-gold"
                         size={20}
                       />
-                      <ChevronDown
-                        className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-primary"
-                        size={24}
-                      />
+                      {isClientDropdownOpen && clientSearchText ? (
+                        <button onClick={() => {setClientSearchText(""); setSelectedClientId("");}} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={18} /></button>
+                      ) : (
+                        <ChevronDown
+                          className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-primary"
+                          size={24}
+                        />
+                      )}
                     </div>
                   </label>
+                  
+                  <AnimatePresence>
+                    {isClientDropdownOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -5 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute z-20 w-full mt-2 bg-white rounded-xl shadow-xl border border-primary/10 max-h-60 overflow-y-auto"
+                      >
+                        {clients.filter(c => c.name.toLowerCase().includes(clientSearchText.toLowerCase())).length === 0 ? (
+                          <div className="p-4 text-center text-slate-500 text-sm">Nenhum cliente encontrado.</div>
+                        ) : (
+                          clients.filter(c => c.name.toLowerCase().includes(clientSearchText.toLowerCase())).map((c) => {
+                            const debt = getClientDebt(c.id);
+                            return (
+                              <div
+                                key={c.id}
+                                onClick={() => {
+                                  setSelectedClientId(c.id);
+                                  setIsClientDropdownOpen(false);
+                                  setClientSearchText("");
+                                }}
+                                className="px-4 py-3 hover:bg-primary/5 cursor-pointer border-b border-slate-50 last:border-0 flex justify-between items-center"
+                              >
+                                <span className="font-bold text-slate-700">{c.name}</span>
+                                {debt > 0 && (
+                                  <span className="text-[10px] uppercase font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">
+                                    Débito: {formatCurrency(debt)}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               )}
             </section>
@@ -806,35 +970,66 @@ export default function Vendas() {
                 </div>
               ) : (
                 <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <select
-                      value={selectedProductIdToAdd}
-                      onChange={(e) =>
-                        setSelectedProductIdToAdd(e.target.value)
-                      }
-                      className="w-full rounded-xl border-primary/20 bg-white text-slate-900 focus:border-primary focus:ring-primary h-14 pl-11 pr-10 appearance-none outline-none border shadow-sm"
-                    >
-                      <option value="">Buscar produto...</option>
-                      {products
-                        .filter((p) => p.quantity > 0)
-                        .map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} - {formatCurrency(p.price)}
-                          </option>
-                        ))}
-                    </select>
+                  <div className="relative flex-1" ref={productDropdownRef}>
+                    <input
+                      type="text"
+                      placeholder="Buscar produto..."
+                      value={isProductDropdownOpen ? productSearchText : (selectedProductIdToAdd ? products.find(p => p.id === selectedProductIdToAdd)?.name : "")}
+                      onChange={(e) => {
+                        setProductSearchText(e.target.value);
+                        setIsProductDropdownOpen(true);
+                        if (selectedProductIdToAdd) setSelectedProductIdToAdd("");
+                      }}
+                      onFocus={() => setIsProductDropdownOpen(true)}
+                      className="w-full rounded-xl border-primary/20 bg-white text-slate-900 focus:border-primary focus:ring-primary h-14 pl-11 pr-10 outline-none border shadow-sm transition-all"
+                    />
                     <Package
                       className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-gold"
                       size={20}
                     />
-                    <ChevronDown
-                      className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-primary"
-                      size={24}
-                    />
+                    {isProductDropdownOpen && productSearchText ? (
+                      <button onClick={() => {setProductSearchText(""); setSelectedProductIdToAdd("");}} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 p-2 hover:bg-slate-100 rounded-full transition-colors"><X size={18} /></button>
+                    ) : (
+                      <ChevronDown
+                        className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-primary"
+                        size={24}
+                      />
+                    )}
+                    
+                    <AnimatePresence>
+                      {isProductDropdownOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -5 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -5 }}
+                          transition={{ duration: 0.15 }}
+                          className="absolute z-20 w-full mt-2 bg-white rounded-xl shadow-xl border border-primary/10 max-h-60 overflow-y-auto"
+                        >
+                          {products.filter(p => p.quantity > 0 && p.name.toLowerCase().includes(productSearchText.toLowerCase())).length === 0 ? (
+                            <div className="p-4 text-center text-slate-500 text-sm">Nenhum produto em estoque.</div>
+                          ) : (
+                            products.filter(p => p.quantity > 0 && p.name.toLowerCase().includes(productSearchText.toLowerCase())).map((p) => (
+                              <div
+                                key={p.id}
+                                onClick={() => {
+                                  setSelectedProductIdToAdd(p.id);
+                                  setIsProductDropdownOpen(false);
+                                  setProductSearchText("");
+                                }}
+                                className="px-4 py-3 hover:bg-primary/5 cursor-pointer border-b border-slate-50 last:border-0 flex justify-between items-center"
+                              >
+                                <span className="font-bold text-slate-700">{p.name}</span>
+                                <span className="text-sm text-primary font-bold">{formatCurrency(p.price)}</span>
+                              </div>
+                            ))
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                   <button
                     onClick={handleAddToCart}
-                    className="h-14 px-5 bg-primary text-white rounded-xl font-bold shadow-sm hover:bg-primary/90 transition-colors"
+                    className="h-14 px-5 bg-primary text-white rounded-xl font-bold shadow-sm hover:bg-primary/90 transition-transform active:scale-95"
                   >
                     Add
                   </button>
@@ -911,7 +1106,7 @@ export default function Vendas() {
                             onClick={() =>
                               updateCartQuantity(item.product.id, -1)
                             }
-                            className="w-8 h-8 flex items-center justify-center text-slate-600 font-bold"
+                            className="w-10 h-10 flex items-center justify-center text-slate-600 font-bold active:scale-95 transition-transform"
                           >
                             -
                           </button>
@@ -922,14 +1117,14 @@ export default function Vendas() {
                             onClick={() =>
                               updateCartQuantity(item.product.id, 1)
                             }
-                            className="w-8 h-8 flex items-center justify-center text-slate-600 font-bold"
+                            className="w-10 h-10 flex items-center justify-center text-slate-600 font-bold active:scale-95 transition-transform"
                           >
                             +
                           </button>
                         </div>
                         <button
                           onClick={() => handleRemoveFromCart(item.product.id)}
-                          className="text-red-400 hover:text-red-600 p-1"
+                          className="text-red-400 hover:text-red-600 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center active:scale-95 transition-transform"
                         >
                           <Trash2 size={18} />
                         </button>
@@ -969,10 +1164,17 @@ export default function Vendas() {
                 Prosseguir para Pagamento
               </button>
             </div>
-          </>
-        ) : (
-          <>
-            {/* PAYMENT SECTION */}
+                </motion.div>
+              ) : (
+                <motion.div 
+                  key="payment"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  transition={{ duration: 0.2 }}
+                  className="space-y-6"
+                >
+                  {/* PAYMENT SECTION */}
             <section className="space-y-4">
               <div className="flex items-center gap-3">
                 <button 
@@ -1251,12 +1453,22 @@ export default function Vendas() {
                 </button>
               )}
             </div>
-          </>
-        )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         ) : (
-          <section className="space-y-4">
-            <div className="bg-white p-4 rounded-xl border border-primary/10 shadow-sm space-y-3">
+          <AnimatePresence mode="wait">
+            <motion.div 
+              key="historico"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-4"
+            >
+              <section className="space-y-4">
+                <div className="bg-white p-4 rounded-xl border border-primary/10 shadow-sm space-y-3">
               <div className="flex justify-between items-center mb-2">
                 <h3 className="text-sm font-semibold uppercase tracking-wider text-primary italic">
                   Filtros
@@ -1418,19 +1630,29 @@ export default function Vendas() {
                                       </span>
                                       {payment.notes && <span className="text-emerald-600 text-xs">{payment.notes}</span>}
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-1.5 shrink-0">
                                       <span className="font-bold text-emerald-800">
                                         +{formatCurrency(payment.amount)}
                                       </span>
                                       <button 
                                         onClick={(e) => {
                                           e.stopPropagation();
+                                          handleOpenEditPayment(sale.id, payment);
+                                        }}
+                                        className="text-blue-600 hover:text-blue-800 bg-blue-100/80 p-1.5 rounded transition-colors"
+                                        title="Editar valor ou dados deste pagamento"
+                                      >
+                                        <Edit size={13} />
+                                      </button>
+                                      <button 
+                                        onClick={(e) => {
+                                          e.stopPropagation();
                                           handleUndoPayment(sale.id, payment.id, payment.amount);
                                         }}
-                                        className="text-red-400 hover:text-red-600 bg-red-100/50 p-1 rounded transition-colors"
-                                        title="Desfazer este pagamento específico"
+                                        className="text-red-500 hover:text-red-700 bg-red-100/80 p-1.5 rounded transition-colors"
+                                        title="Excluir apenas este pagamento"
                                       >
-                                        <Trash2 size={12} />
+                                        <Trash2 size={13} />
                                       </button>
                                     </div>
                                   </div>
@@ -1479,6 +1701,8 @@ export default function Vendas() {
               )}
             </div>
           </section>
+            </motion.div>
+          </AnimatePresence>
         )}
       </main>
 
@@ -1580,6 +1804,108 @@ export default function Vendas() {
                 </svg>
                 Enviar Resumo via WhatsApp
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Edição de Pagamento */}
+      {editingPayment && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl border border-primary/10 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                <Edit className="text-primary" size={20} />
+                Editar Pagamento
+              </h3>
+              <button
+                onClick={() => setEditingPayment(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                  Valor Pago (R$)
+                </label>
+                <input
+                  type="text"
+                  value={editPaymentAmount}
+                  onChange={(e) =>
+                    setEditPaymentAmount(formatPriceInput(e.target.value))
+                  }
+                  placeholder="R$ 0,00"
+                  className="w-full h-12 px-3 text-lg font-bold text-emerald-700 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 focus:bg-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    Data
+                  </label>
+                  <input
+                    type="date"
+                    value={editPaymentDate}
+                    onChange={(e) => setEditPaymentDate(e.target.value)}
+                    className="w-full h-11 px-3 text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary focus:bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    Forma
+                  </label>
+                  <select
+                    value={editPaymentMethod}
+                    onChange={(e) => setEditPaymentMethod(e.target.value)}
+                    className="w-full h-11 px-3 text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary focus:bg-white"
+                  >
+                    <option value="Pix">Pix</option>
+                    <option value="Dinheiro">Dinheiro</option>
+                    <option value="Cartão de Crédito">Crédito</option>
+                    <option value="Cartão de Débito">Débito</option>
+                    <option value="Outro">Outro</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                  Observações
+                </label>
+                <input
+                  type="text"
+                  value={editPaymentNotes}
+                  onChange={(e) => setEditPaymentNotes(e.target.value)}
+                  placeholder="Ex: Pagamento 1ª parcela, abatimento..."
+                  className="w-full h-11 px-3 text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary focus:bg-white"
+                />
+              </div>
+
+              <div className="bg-emerald-50 text-emerald-800 text-xs p-3 rounded-xl border border-emerald-100 flex items-center gap-2">
+                <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
+                <span>
+                  Ao salvar, o saldo restante da venda será recalculado com segurança e todos os outros pagamentos continuarão preservados.
+                </span>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={handleSaveEditPayment}
+                  className="flex-1 h-12 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl shadow-md shadow-emerald-500/20 active:scale-95 transition-all text-sm"
+                >
+                  Salvar Alterações
+                </button>
+                <button
+                  onClick={() => setEditingPayment(null)}
+                  className="h-12 px-5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl active:scale-95 transition-all text-sm"
+                >
+                  Cancelar
+                </button>
+              </div>
             </div>
           </div>
         </div>

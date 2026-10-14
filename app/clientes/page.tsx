@@ -19,7 +19,7 @@ import {
   MessageCircle,
   Download,
 } from "lucide-react";
-import { api, Client, Sale, Product } from "@/lib/api";
+import { api, Client, Sale, Product, Payment } from "@/lib/api";
 
 import { getStoreSettings } from "@/lib/storeSettings";
 import { exportToExcel, exportToPDF } from "@/lib/export";
@@ -51,6 +51,16 @@ export default function Clientes() {
   const [paymentMethod, setPaymentMethod] = useState("Pix");
   const [paymentNotes, setPaymentNotes] = useState("");
   const [isAddingPayment, setIsAddingPayment] = useState(true);
+
+  // Edit payment modal state
+  const [editingPayment, setEditingPayment] = useState<{
+    saleId: string;
+    payment: Payment;
+  } | null>(null);
+  const [editPaymentAmount, setEditPaymentAmount] = useState("");
+  const [editPaymentDate, setEditPaymentDate] = useState("");
+  const [editPaymentMethod, setEditPaymentMethod] = useState("Pix");
+  const [editPaymentNotes, setEditPaymentNotes] = useState("");
 
   useEffect(() => {
     async function loadData() {
@@ -381,45 +391,92 @@ export default function Clientes() {
     }
   };
 
-  const handleResetPayment = async (saleId: string, totalValue: number) => {
-    if (
-      !confirm(
-        "Tem certeza que deseja zerar os pagamentos desta venda? O valor restante voltará a ser o valor total da venda.",
-      )
-    )
+  const handleOpenEditPayment = (saleId: string, payment: Payment) => {
+    setEditingPayment({ saleId, payment });
+    setEditPaymentAmount(formatPriceInput((payment.amount * 100).toFixed(0)));
+    setEditPaymentDate(payment.paymentDate ? payment.paymentDate.split("T")[0] : new Date().toISOString().split("T")[0]);
+    setEditPaymentMethod(payment.paymentMethod || "Pix");
+    setEditPaymentNotes(payment.notes || "");
+  };
+
+  const handleSaveEditPayment = async () => {
+    if (!editingPayment) return;
+    const newAmount = parsePriceInput(editPaymentAmount);
+    if (isNaN(newAmount) || newAmount <= 0) {
+      alert("Por favor, digite um valor válido maior que zero.");
       return;
+    }
 
     try {
-      const updatedSale = await api.updateSale(saleId, {
-        amountPaid: 0,
-        remainingValue: totalValue,
-        payments: [],
+      const currentSale = sales.find((s) => s.id === editingPayment.saleId);
+      if (!currentSale) return;
+
+      const updatedPayments = (currentSale.payments || []).map((p) => {
+        if (p.id === editingPayment.payment.id) {
+          return {
+            ...p,
+            amount: newAmount,
+            paymentDate: editPaymentDate ? new Date(editPaymentDate + "T12:00:00").toISOString() : p.paymentDate,
+            paymentMethod: editPaymentMethod,
+            notes: editPaymentNotes,
+          };
+        }
+        return p;
+      });
+
+      const newAmountPaid = updatedPayments.reduce((acc, p) => acc + p.amount, 0);
+      const newRemainingValue = Math.max(0, currentSale.totalValue - newAmountPaid);
+
+      const updatedSale = await api.updateSale(editingPayment.saleId, {
+        amountPaid: newAmountPaid,
+        remainingValue: newRemainingValue,
+        payments: updatedPayments,
       });
 
       setSales(
         sales.map((s) =>
-          s.id === saleId
-            ? { ...s, amountPaid: 0, remainingValue: totalValue, payments: [] }
-            : s,
+          s.id === editingPayment.saleId
+            ? { ...s, amountPaid: newAmountPaid, remainingValue: newRemainingValue, payments: updatedPayments }
+            : s
         ),
       );
+
+      setEditingPayment(null);
+      alert("Pagamento atualizado com sucesso!");
     } catch (error) {
-      console.error("Error resetting payment:", error);
-      alert("Erro ao zerar pagamento.");
+      console.error("Error updating payment:", error);
+      alert("Erro ao salvar alterações no pagamento.");
     }
   };
 
   const handleUndoPayment = async (saleId: string, paymentId: string, paymentAmount: number) => {
-    if (!window.confirm(`Deseja realmente desfazer este pagamento de ${formatCurrency(paymentAmount)}? O saldo devedor retornará.`)) return;
+    const confirmed = window.confirm(
+      `Deseja realmente excluir APENAS este pagamento de ${formatCurrency(paymentAmount)}?\n\nOs outros pagamentos desta venda continuarão salvos e preservados.`
+    );
+    if (!confirmed) return;
 
     try {
       const currentSale = sales.find(s => s.id === saleId);
       if (!currentSale) return;
 
+      const paymentToDelete = (currentSale.payments || []).find(p => p.id === paymentId);
+      // Save backup in localStorage for recovery peace of mind
+      try {
+        const auditLog = JSON.parse(localStorage.getItem("audit_deleted_payments") || "[]");
+        auditLog.unshift({
+          deletedAt: new Date().toISOString(),
+          saleId,
+          payment: paymentToDelete,
+        });
+        localStorage.setItem("audit_deleted_payments", JSON.stringify(auditLog.slice(0, 100)));
+      } catch (err) {
+        console.warn("Could not save audit log", err);
+      }
+
       const updatedPayments = (currentSale.payments || []).filter(p => p.id !== paymentId);
       
       const newAmountPaid = updatedPayments.reduce((acc, p) => acc + p.amount, 0);
-      const newRemainingValue = currentSale.totalValue - newAmountPaid;
+      const newRemainingValue = Math.max(0, currentSale.totalValue - newAmountPaid);
 
       const updatedSale = await api.updateSale(saleId, {
         amountPaid: newAmountPaid,
@@ -823,7 +880,7 @@ export default function Clientes() {
 
                               <div className="mt-2 pt-2 border-t border-slate-100 flex flex-col gap-2">
                                 {sale.amountPaid > 0 && (
-                                  <div className="bg-emerald-50 p-2 rounded-lg border border-emerald-100 flex flex-col gap-2">
+                                  <div className="bg-emerald-50 p-2.5 rounded-lg border border-emerald-100 flex flex-col gap-2">
                                     <div className="flex justify-between items-center">
                                       <div>
                                         <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">
@@ -833,18 +890,6 @@ export default function Clientes() {
                                           {formatCurrency(sale.amountPaid)}
                                         </p>
                                       </div>
-                                      <button
-                                        onClick={() =>
-                                          handleResetPayment(
-                                            sale.id,
-                                            sale.totalValue,
-                                          )
-                                        }
-                                        className="flex items-center gap-1 bg-red-100 text-red-600 px-2 py-1.5 rounded-md text-xs font-bold hover:bg-red-200 transition-colors"
-                                        title="Zerar todos os pagamentos"
-                                      >
-                                        <Trash2 size={14} /> Zerar Pagamentos
-                                      </button>
                                     </div>
                                     
                                     {sale.payments && sale.payments.length > 0 && (
@@ -853,24 +898,31 @@ export default function Clientes() {
                                           Histórico de Pagamentos
                                         </p>
                                         {sale.payments.map((payment) => (
-                                          <div key={payment.id} className="flex justify-between items-center text-xs">
-                                            <div className="flex flex-col">
-                                              <span className="text-emerald-700 font-medium">
+                                          <div key={payment.id} className="flex justify-between items-center text-xs py-1 border-b border-emerald-100/50 last:border-0">
+                                            <div className="flex flex-col pr-2">
+                                              <span className="text-emerald-800 font-medium">
                                                 {new Date(payment.paymentDate).toLocaleDateString("pt-BR")}
-                                                {payment.paymentMethod && <span className="ml-1 text-emerald-800 font-semibold">[{payment.paymentMethod}]</span>}
+                                                {payment.paymentMethod && <span className="ml-1 text-emerald-900 font-semibold">[{payment.paymentMethod}]</span>}
                                               </span>
-                                              {payment.notes && <span className="text-emerald-600">Obs: {payment.notes}</span>}
+                                              {payment.notes && <span className="text-emerald-700/80 text-[11px]">Obs: {payment.notes}</span>}
                                             </div>
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-1.5 shrink-0">
                                               <span className="font-bold text-emerald-800">
                                                 +{formatCurrency(payment.amount)}
                                               </span>
                                               <button 
-                                                onClick={() => handleUndoPayment(sale.id, payment.id, payment.amount)}
-                                                className="text-red-400 hover:text-red-600 bg-red-100/50 p-1 rounded transition-colors"
-                                                title="Desfazer este pagamento específico"
+                                                onClick={() => handleOpenEditPayment(sale.id, payment)}
+                                                className="text-blue-600 hover:text-blue-800 bg-blue-100/80 p-1.5 rounded transition-colors"
+                                                title="Editar valor ou dados deste pagamento"
                                               >
-                                                <Trash2 size={12} />
+                                                <Edit2 size={13} />
+                                              </button>
+                                              <button 
+                                                onClick={() => handleUndoPayment(sale.id, payment.id, payment.amount)}
+                                                className="text-red-500 hover:text-red-700 bg-red-100/80 p-1.5 rounded transition-colors"
+                                                title="Excluir apenas este pagamento"
+                                              >
+                                                <Trash2 size={13} />
                                               </button>
                                             </div>
                                           </div>
@@ -1134,6 +1186,108 @@ export default function Clientes() {
             </div>
           )}
         </div>
+
+        {/* Modal de Edição de Pagamento */}
+        {editingPayment && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl border border-primary/10 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                  <Edit2 className="text-primary" size={20} />
+                  Editar Pagamento
+                </h3>
+                <button
+                  onClick={() => setEditingPayment(null)}
+                  className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    Valor Pago (R$)
+                  </label>
+                  <input
+                    type="text"
+                    value={editPaymentAmount}
+                    onChange={(e) =>
+                      setEditPaymentAmount(formatPriceInput(e.target.value))
+                    }
+                    placeholder="R$ 0,00"
+                    className="w-full h-12 px-3 text-lg font-bold text-emerald-700 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 focus:bg-white"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                      Data
+                    </label>
+                    <input
+                      type="date"
+                      value={editPaymentDate}
+                      onChange={(e) => setEditPaymentDate(e.target.value)}
+                      className="w-full h-11 px-3 text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary focus:bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                      Forma
+                    </label>
+                    <select
+                      value={editPaymentMethod}
+                      onChange={(e) => setEditPaymentMethod(e.target.value)}
+                      className="w-full h-11 px-3 text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary focus:bg-white"
+                    >
+                      <option value="Pix">Pix</option>
+                      <option value="Dinheiro">Dinheiro</option>
+                      <option value="Cartão de Crédito">Crédito</option>
+                      <option value="Cartão de Débito">Débito</option>
+                      <option value="Outro">Outro</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    Observações
+                  </label>
+                  <input
+                    type="text"
+                    value={editPaymentNotes}
+                    onChange={(e) => setEditPaymentNotes(e.target.value)}
+                    placeholder="Ex: Pagamento 1ª parcela, abatimento..."
+                    className="w-full h-11 px-3 text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary focus:bg-white"
+                  />
+                </div>
+
+                <div className="bg-emerald-50 text-emerald-800 text-xs p-3 rounded-xl border border-emerald-100 flex items-center gap-2">
+                  <CheckCircle size={16} className="shrink-0 text-emerald-600" />
+                  <span>
+                    Ao salvar, o saldo restante da cliente será recalculado automaticamente e todos os outros pagamentos serão preservados.
+                  </span>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={handleSaveEditPayment}
+                    className="flex-1 h-12 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl shadow-md shadow-emerald-500/20 active:scale-95 transition-all text-sm"
+                  >
+                    Salvar Alterações
+                  </button>
+                  <button
+                    onClick={() => setEditingPayment(null)}
+                    className="h-12 px-5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl active:scale-95 transition-all text-sm"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
