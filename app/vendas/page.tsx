@@ -24,6 +24,8 @@ import {
   Banknote,
   Download,
   ShieldAlert,
+  AlertTriangle,
+  Clock,
 } from "lucide-react";
 import { api, Client, Product, Sale, SaleItem, Payment } from "@/lib/api";
 import { logPaymentAction } from "@/lib/auditLog";
@@ -90,6 +92,7 @@ export default function Vendas() {
   const [activeTab, setActiveTab] = useState<"nova" | "historico">("nova");
   const [filterDate, setFilterDate] = useState("");
   const [filterClient, setFilterClient] = useState("");
+  const [filterOverdueOnly, setFilterOverdueOnly] = useState(false);
   const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
   const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
   const [checkoutStep, setCheckoutStep] = useState<"cart" | "payment">("cart");
@@ -135,6 +138,16 @@ export default function Vendas() {
     return map;
   }, [clients]);
 
+  const overduePendingSalesCount = useMemo(() => {
+    const now = new Date().getTime();
+    return sales.filter((s) => {
+      if (!s.remainingValue || s.remainingValue <= 0) return false;
+      const saleTime = s.date ? new Date(s.date).getTime() : 0;
+      const diffDays = Math.floor((now - saleTime) / (1000 * 60 * 60 * 24));
+      return diffDays > 30;
+    }).length;
+  }, [sales]);
+
   const filteredSales = useMemo(() => {
     return sales
       .filter((sale) => {
@@ -152,6 +165,15 @@ export default function Vendas() {
             (sale.clientId || "").toLowerCase().includes(searchTerm);
         }
 
+        if (filterOverdueOnly) {
+          const now = new Date().getTime();
+          const saleTime = sale.date ? new Date(sale.date).getTime() : 0;
+          const diffDays = Math.floor((now - saleTime) / (1000 * 60 * 60 * 24));
+          if (!((sale.remainingValue || 0) > 0 && diffDays > 30)) {
+            return false;
+          }
+        }
+
         return matchDate && matchClient;
       })
       .sort((a, b) => {
@@ -159,7 +181,7 @@ export default function Vendas() {
         const dateB = b.date ? new Date(b.date).getTime() : 0;
         return dateB - dateA;
       });
-  }, [sales, filterDate, filterClient, clientsById]);
+  }, [sales, filterDate, filterClient, filterOverdueOnly, clientsById]);
 
   const selectedClient = useMemo(
     () => clientsById[selectedClientId],
@@ -1535,17 +1557,37 @@ export default function Vendas() {
                   className="flex-1 rounded-lg border border-primary/20 bg-background-light focus:border-primary focus:ring-1 focus:ring-primary h-10 px-3 outline-none text-sm text-slate-700"
                 />
               </div>
-              {(filterDate || filterClient) && (
-                <button
-                  onClick={() => {
-                    setFilterDate("");
-                    setFilterClient("");
-                  }}
-                  className="text-xs text-primary font-bold hover:underline"
-                >
-                  Limpar Filtros
-                </button>
-              )}
+              <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
+                <div className="flex items-center gap-2">
+                  {overduePendingSalesCount > 0 && (
+                    <button
+                      onClick={() => setFilterOverdueOnly(!filterOverdueOnly)}
+                      className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1.5 rounded-lg border transition-all ${
+                        filterOverdueOnly
+                          ? "bg-amber-500 text-white border-amber-600 shadow-sm"
+                          : "bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100"
+                      }`}
+                      title="Filtrar apenas vendas pendentes há mais de 30 dias"
+                    >
+                      <AlertTriangle size={13} className={filterOverdueOnly ? "text-white" : "text-amber-600"} />
+                      Pendentes (+30 dias): {overduePendingSalesCount}
+                    </button>
+                  )}
+                </div>
+
+                {(filterDate || filterClient || filterOverdueOnly) && (
+                  <button
+                    onClick={() => {
+                      setFilterDate("");
+                      setFilterClient("");
+                      setFilterOverdueOnly(false);
+                    }}
+                    className="text-xs text-primary font-bold hover:underline ml-auto"
+                  >
+                    Limpar Filtros
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="space-y-3">
@@ -1558,17 +1600,52 @@ export default function Vendas() {
                   const client = clientsById[sale.clientId];
                   const isExpanded = expandedSaleId === sale.id;
 
+                  // Status check: 'a receber' or 'parcial'
+                  const isPending = (sale.remainingValue || 0) > 0;
+                  const isPartial = isPending && ((sale.amountPaid || 0) > 0);
+                  const isAReceber = isPending && (!sale.amountPaid || sale.amountPaid <= 0);
+
+                  // Time check: date > 30 days
+                  const saleDate = sale.date ? new Date(sale.date) : new Date();
+                  const now = new Date();
+                  const diffDays = Math.floor(
+                    (now.getTime() - saleDate.getTime()) / (1000 * 60 * 60 * 24),
+                  );
+                  const isOver30Days = diffDays > 30;
+
+                  // Visual distinction for sales with status 'a receber' or 'parcial' and date > 30 days
+                  const isOverduePending = (isPartial || isAReceber) && isOver30Days;
+
                   return (
                     <div
                       key={sale.id}
-                      className="bg-white rounded-xl border border-primary/10 shadow-sm overflow-hidden transition-all"
+                      className={`rounded-xl shadow-sm overflow-hidden transition-all ${
+                        isOverduePending
+                          ? "bg-gradient-to-r from-amber-50/50 via-white to-white border-2 border-amber-400 border-l-[6px] border-l-amber-500 shadow-amber-500/10 ring-1 ring-amber-400/20"
+                          : "bg-white border border-primary/10"
+                      }`}
                     >
                       <div
-                        className="p-4 cursor-pointer hover:bg-slate-50 transition-colors"
+                        className="p-4 cursor-pointer hover:bg-slate-50/80 transition-colors"
                         onClick={() =>
                           setExpandedSaleId(isExpanded ? null : sale.id)
                         }
                       >
+                        {isOverduePending && (
+                          <div className="mb-2.5 flex items-center justify-between bg-amber-100/90 text-amber-900 border border-amber-300 px-2.5 py-1 rounded-lg text-xs font-bold">
+                            <div className="flex items-center gap-1.5">
+                              <AlertTriangle size={13} className="text-amber-700 shrink-0" />
+                              <span>
+                                {isPartial ? "Saldo Parcial" : "A Receber"} em aberto (+30 dias)
+                              </span>
+                            </div>
+                            <span className="flex items-center gap-1 bg-amber-200 text-amber-950 px-2 py-0.5 rounded text-[11px] font-extrabold">
+                              <Clock size={11} />
+                              {diffDays} dias
+                            </span>
+                          </div>
+                        )}
+
                         <div className="flex justify-between items-start">
                           <div>
                             <p className="font-bold text-slate-900">
@@ -1601,11 +1678,20 @@ export default function Vendas() {
                           </div>
                         </div>
                         {sale.remainingValue > 0 && (
-                          <div className="flex justify-between items-center text-xs pt-3 mt-2 border-t border-slate-100">
-                            <span className="text-emerald-600 font-semibold">
-                              Pago: {formatCurrency(sale.amountPaid)}
-                            </span>
-                            <span className="text-orange-500 font-bold">
+                          <div className={`flex justify-between items-center text-xs pt-3 mt-2 border-t ${
+                            isOverduePending ? "border-amber-200" : "border-slate-100"
+                          }`}>
+                            <div className="flex items-center gap-2">
+                              <span className="text-emerald-600 font-semibold">
+                                Pago: {formatCurrency(sale.amountPaid)}
+                              </span>
+                              {isOverduePending && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300">
+                                  <AlertTriangle size={10} className="text-amber-700" /> +30d pendente
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-orange-600 font-bold">
                               Fiado: {formatCurrency(sale.remainingValue)}
                             </span>
                           </div>
