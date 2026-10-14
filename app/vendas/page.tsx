@@ -23,8 +23,11 @@ import {
   MessageCircle,
   Banknote,
   Download,
+  ShieldAlert,
 } from "lucide-react";
 import { api, Client, Product, Sale, SaleItem, Payment } from "@/lib/api";
+import { logPaymentAction } from "@/lib/auditLog";
+import PaymentAuditModal from "@/components/PaymentAuditModal";
 
 interface CartItem {
   product: Product;
@@ -100,6 +103,7 @@ export default function Vendas() {
   const [editPaymentDate, setEditPaymentDate] = useState("");
   const [editPaymentMethod, setEditPaymentMethod] = useState("Pix");
   const [editPaymentNotes, setEditPaymentNotes] = useState("");
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
 
   // UI States for Autocomplete
   const [clientSearchText, setClientSearchText] = useState("");
@@ -477,6 +481,23 @@ export default function Vendas() {
         payments: updatedPayments,
       });
 
+      // Audit log for payment edition
+      const clientObj = clients.find((c) => c.id === currentSale.clientId);
+      await logPaymentAction({
+        action: "EDIT",
+        saleId: editingPayment.saleId,
+        clientId: currentSale.clientId,
+        clientName: clientObj?.name,
+        paymentId: editingPayment.payment.id,
+        oldAmount: editingPayment.payment.amount,
+        newAmount: newAmount,
+        oldMethod: editingPayment.payment.paymentMethod,
+        newMethod: editPaymentMethod,
+        oldDate: editingPayment.payment.paymentDate,
+        newDate: editPaymentDate,
+        notes: editPaymentNotes,
+      });
+
       setSales(
         sales.map((s) =>
           s.id === editingPayment.saleId
@@ -504,17 +525,21 @@ export default function Vendas() {
       if (!currentSale) return;
 
       const paymentToDelete = (currentSale.payments || []).find(p => p.id === paymentId);
-      try {
-        const auditLog = JSON.parse(localStorage.getItem("audit_deleted_payments") || "[]");
-        auditLog.unshift({
-          deletedAt: new Date().toISOString(),
-          saleId,
-          payment: paymentToDelete,
-        });
-        localStorage.setItem("audit_deleted_payments", JSON.stringify(auditLog.slice(0, 100)));
-      } catch (err) {
-        console.warn("Could not save audit log", err);
-      }
+      const clientObj = clients.find((c) => c.id === currentSale.clientId);
+
+      // Record audit log for deletion
+      await logPaymentAction({
+        action: "DELETE",
+        saleId: saleId,
+        clientId: currentSale.clientId,
+        clientName: clientObj?.name,
+        paymentId: paymentId,
+        oldAmount: paymentAmount,
+        newAmount: 0,
+        oldMethod: paymentToDelete?.paymentMethod,
+        oldDate: paymentToDelete?.paymentDate,
+        notes: paymentToDelete?.notes || "Exclusão individual de pagamento",
+      });
 
       const updatedPayments = (currentSale.payments || []).filter(p => p.id !== paymentId);
       
@@ -1486,6 +1511,13 @@ export default function Vendas() {
                   >
                     <Download size={14} /> PDF
                   </button>
+                  <button
+                    onClick={() => setIsAuditModalOpen(true)}
+                    className="flex items-center gap-1 text-xs font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200 hover:bg-purple-100 transition-colors"
+                    title="Histórico de auditoria de alterações e exclusões de pagamentos"
+                  >
+                    <ShieldAlert size={14} /> Auditoria
+                  </button>
                 </div>
               </div>
               <div className="flex gap-2">
@@ -1910,6 +1942,15 @@ export default function Vendas() {
           </div>
         </div>
       )}
+
+      <PaymentAuditModal
+        isOpen={isAuditModalOpen}
+        onClose={() => setIsAuditModalOpen(false)}
+        onPaymentRestored={async () => {
+          const fetchedSales = await api.getSales();
+          setSales(fetchedSales);
+        }}
+      />
     </div>
   );
 }

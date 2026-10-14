@@ -18,8 +18,12 @@ import {
   Wallet,
   MessageCircle,
   Download,
+  ShieldAlert,
+  History,
 } from "lucide-react";
 import { api, Client, Sale, Product, Payment } from "@/lib/api";
+import { logPaymentAction } from "@/lib/auditLog";
+import PaymentAuditModal from "@/components/PaymentAuditModal";
 
 import { getStoreSettings } from "@/lib/storeSettings";
 import { exportToExcel, exportToPDF } from "@/lib/export";
@@ -61,6 +65,10 @@ export default function Clientes() {
   const [editPaymentDate, setEditPaymentDate] = useState("");
   const [editPaymentMethod, setEditPaymentMethod] = useState("Pix");
   const [editPaymentNotes, setEditPaymentNotes] = useState("");
+
+  // Audit Log state
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
+  const [auditFilterClient, setAuditFilterClient] = useState<{ id?: string; name?: string } | null>(null);
 
   useEffect(() => {
     async function loadData() {
@@ -296,6 +304,20 @@ export default function Clientes() {
           payments: finalPayments,
         });
 
+        // Audit log for each payment registered
+        const clientObj = clients.find((c) => c.id === clientId);
+        logPaymentAction({
+          action: "CREATE",
+          saleId: sale.id,
+          clientId: clientId,
+          clientName: clientObj?.name,
+          paymentId: newPayment.id,
+          oldAmount: 0,
+          newAmount: paymentForThisSale,
+          newMethod: paymentMethod,
+          notes: newPayment.notes,
+        });
+
         const index = updatedSales.findIndex((s) => s.id === updatedSale.id);
         if (index !== -1) {
           updatedSales[index] = { ...updatedSale, items: sale.items, payments: updatedSale.payments };
@@ -371,6 +393,20 @@ export default function Clientes() {
         payments: finalPayments,
       });
 
+      const clientObj = clients.find((c) => c.id === currentSale?.clientId);
+      if (diff !== 0) {
+        logPaymentAction({
+          action: "CREATE",
+          saleId: saleId,
+          clientId: currentSale?.clientId,
+          clientName: clientObj?.name,
+          oldAmount: currentAmountPaid,
+          newAmount: newAmountPaid,
+          newMethod: paymentMethod,
+          notes: paymentNotes || (isAddingPayment ? "Pagamento adicional" : "Ajuste manual de saldo"),
+        });
+      }
+
       setSales(
         sales.map((s) =>
           s.id === saleId
@@ -433,6 +469,23 @@ export default function Clientes() {
         payments: updatedPayments,
       });
 
+      // Audit log for payment edition
+      const clientObj = clients.find((c) => c.id === currentSale.clientId);
+      await logPaymentAction({
+        action: "EDIT",
+        saleId: editingPayment.saleId,
+        clientId: currentSale.clientId,
+        clientName: clientObj?.name,
+        paymentId: editingPayment.payment.id,
+        oldAmount: editingPayment.payment.amount,
+        newAmount: newAmount,
+        oldMethod: editingPayment.payment.paymentMethod,
+        newMethod: editPaymentMethod,
+        oldDate: editingPayment.payment.paymentDate,
+        newDate: editPaymentDate,
+        notes: editPaymentNotes,
+      });
+
       setSales(
         sales.map((s) =>
           s.id === editingPayment.saleId
@@ -460,18 +513,21 @@ export default function Clientes() {
       if (!currentSale) return;
 
       const paymentToDelete = (currentSale.payments || []).find(p => p.id === paymentId);
-      // Save backup in localStorage for recovery peace of mind
-      try {
-        const auditLog = JSON.parse(localStorage.getItem("audit_deleted_payments") || "[]");
-        auditLog.unshift({
-          deletedAt: new Date().toISOString(),
-          saleId,
-          payment: paymentToDelete,
-        });
-        localStorage.setItem("audit_deleted_payments", JSON.stringify(auditLog.slice(0, 100)));
-      } catch (err) {
-        console.warn("Could not save audit log", err);
-      }
+      const clientObj = clients.find((c) => c.id === currentSale.clientId);
+
+      // Record audit log for deletion
+      await logPaymentAction({
+        action: "DELETE",
+        saleId: saleId,
+        clientId: currentSale.clientId,
+        clientName: clientObj?.name,
+        paymentId: paymentId,
+        oldAmount: paymentAmount,
+        newAmount: 0,
+        oldMethod: paymentToDelete?.paymentMethod,
+        oldDate: paymentToDelete?.paymentDate,
+        notes: paymentToDelete?.notes || "Exclusão individual de pagamento",
+      });
 
       const updatedPayments = (currentSale.payments || []).filter(p => p.id !== paymentId);
       
@@ -657,6 +713,16 @@ export default function Clientes() {
               className="flex items-center gap-1 text-xs font-bold text-red-600 bg-red-50 px-3 py-2 rounded-lg border border-red-200 hover:bg-red-100 transition-colors"
             >
               <Download size={16} /> PDF
+            </button>
+            <button
+              onClick={() => {
+                setAuditFilterClient(null);
+                setIsAuditModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 text-xs font-bold text-purple-700 bg-purple-50 px-3 py-2 rounded-lg border border-purple-200 hover:bg-purple-100 transition-colors"
+              title="Histórico de alterações e auditoria de pagamentos"
+            >
+              <ShieldAlert size={15} /> Auditoria
             </button>
           </div>
         </div>
@@ -894,9 +960,21 @@ export default function Clientes() {
                                     
                                     {sale.payments && sale.payments.length > 0 && (
                                       <div className="mt-2 space-y-1">
-                                        <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider border-b border-emerald-200 pb-1 mb-2">
-                                          Histórico de Pagamentos
-                                        </p>
+                                        <div className="flex justify-between items-center border-b border-emerald-200 pb-1 mb-2">
+                                          <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">
+                                            Histórico de Pagamentos
+                                          </p>
+                                          <button
+                                            onClick={() => {
+                                              setAuditFilterClient({ id: client.id, name: client.name });
+                                              setIsAuditModalOpen(true);
+                                            }}
+                                            className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-700 hover:text-purple-900 bg-purple-100/80 hover:bg-purple-200/80 px-2 py-0.5 rounded transition-colors"
+                                            title="Ver auditoria deste cliente"
+                                          >
+                                            <ShieldAlert size={11} /> Auditoria
+                                          </button>
+                                        </div>
                                         {sale.payments.map((payment) => (
                                           <div key={payment.id} className="flex justify-between items-center text-xs py-1 border-b border-emerald-100/50 last:border-0">
                                             <div className="flex flex-col pr-2">
@@ -1288,6 +1366,17 @@ export default function Clientes() {
             </div>
           </div>
         )}
+
+        <PaymentAuditModal
+          isOpen={isAuditModalOpen}
+          onClose={() => setIsAuditModalOpen(false)}
+          filterClientId={auditFilterClient?.id}
+          filterClientName={auditFilterClient?.name}
+          onPaymentRestored={async () => {
+            const fetchedSales = await api.getSales();
+            setSales(fetchedSales);
+          }}
+        />
       </main>
     </div>
   );
